@@ -1,0 +1,22 @@
+log/
+logs/
+build/
+install/
+
+
+# Catkin custom files
+CATKIN_IGNORE
+
+
+.vscode/
+.venv/
+
+eeprom.bin
+
+terrain/
+
+mav.parm
+mav.tlog*
+*.repos
+
+

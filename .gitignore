@@ -10,6 +10,8 @@ CATKIN_IGNORE
 
 .vscode/
 .venv/
+__pycache__/
+*.pyc
 
 eeprom.bin
 

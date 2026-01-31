@@ -41,6 +41,13 @@ https://gazebosim.org/docs/harmonic/install_ubuntu/
 
 To install Gazebo Harmonic according to the instructions on the page.
 
+
+Ardupilot Sitl Installation
+-----------------------
+The following link is used for reference:
+
+
+
 Install MAVROS
 -----------------------
 https://docs.ros.org/en/humble/p/mavros/
@@ -53,3 +60,54 @@ wget https://raw.githubusercontent.com/mavlink/mavros/ros2/mavros/scripts/instal
 sudo ./install_geographiclib_datasets.sh
 
 
+
+Drone Control (Target Spawner + Follower)
+----------------------------------------
+This workspace includes a Python ROS 2 package `drone_control` with two nodes:
+
+- `target_spawner`: spawns a random target near the takeoff point, publishes its position, and respawns after hover.
+- `target_follower`: follows the target by publishing local position setpoints and handles GUIDED + arming.
+
+Topics
+- Subscribed (MAVROS):
+  - `/mavros/local_position/pose` (geometry_msgs/PoseStamped)
+  - `/mavros/state` (mavros_msgs/State)
+  - `/mavros/home_position/home` (mavros_msgs/HomePosition)
+- Published:
+  - `/drone_control/target/pose` (geometry_msgs/PoseStamped)
+  - `/drone_control/target/gps` (sensor_msgs/NavSatFix)
+  - `/drone_control/target/status` (std_msgs/String)
+  - `/mavros/setpoint_position/local` (geometry_msgs/PoseStamped)
+- Services used:
+  - `/mavros/cmd/arming` (mavros_msgs/srv/CommandBool)
+  - `/mavros/set_mode` (mavros_msgs/srv/SetMode)
+  - `/world/<world>/create` (ros_gz_interfaces/srv/SpawnEntity)
+
+Notes
+- Target positions are in MAVROS local ENU. GPS output is an approximate conversion using the home position.
+- Spawn uses `allow_renaming=true` so it won’t fail if a box with the same name already exists.
+
+Run
+1) Build:
+   - `colcon build --packages-select drone_control`
+   - `source install/setup.bash`
+2) Launch:
+   - `ros2 launch drone_control target_demo.launch.py`
+
+Simple takeoff (no targets)
+---------------------------
+Runs a minimal node that switches to GUIDED, arms, and climbs to 20m above the current position.
+
+- `ros2 run drone_control simple_takeoff`
+
+Useful params:
+- `takeoff_altitude_m` (default `20.0`)
+- `arm_on_start` (default `true`)
+
+Useful launch params
+- `world_name` (default `iris_runway`)
+- `spawn_service` (default `/world/map/create`)
+- `radius_m`, `hover_radius_m`, `hover_duration_s`, `target_altitude_m`
+
+Example:
+- `ros2 launch drone_control target_demo.launch.py radius_m:=50.0 target_altitude_m:=25.0`

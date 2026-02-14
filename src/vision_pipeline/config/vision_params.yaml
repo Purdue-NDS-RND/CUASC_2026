@@ -1,0 +1,16 @@
+image_grabber:
+  ros__parameters:
+    image_width: 4656
+    image_height: 3496
+    fps: 9
+    shutter_speed: 0
+    image_publishing_rate: 4.0
+
+yolo_node:
+  ros__parameters:
+    model_path: "yolo26n_v0.04.engine"
+    conf_threshold: 0.50
+    iou_threshold: 0.50
+    slice_size: 1280
+    overlap_ratio: 0.2
+    publish_debug_image: true

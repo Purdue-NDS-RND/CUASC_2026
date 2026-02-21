@@ -97,12 +97,17 @@ def main() -> None:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    
-    # Cleanup
-    node.get_logger().info("Releasing camera hardware...")
-    node._camera.release()
-    node.destroy_node()
-    rclpy.shutdown()
+    finally:
+        # 1. Release the camera hardware cleanly
+        if hasattr(node, '_camera'):
+            node._camera.release()
+
+        # 2. Destroy the node
+        node.destroy_node()
+
+        # 3. Shutdown rclpy safely
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == "__main__":
     main()

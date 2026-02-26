@@ -85,6 +85,7 @@ class WaypointFollower(Node):
         self.declare_parameter("setpoint_rate_hz", 20.0)
         self.declare_parameter("max_waypoints", 0)  # 0 = unlimited
         self.declare_parameter("return_to_launch", False)  # RTL after max waypoints
+        self.declare_parameter("use_noisy_gps", False)  # Use noisy GPS for navigation
 
         # State
         self._flight_state = FlightState.INIT
@@ -117,14 +118,16 @@ class WaypointFollower(Node):
             self._on_drone_local_pose,
             qos_profile_sensor_data,
         )
-        # Subscribe to GPS waypoints
+        # Subscribe to GPS waypoints (noisy or true based on parameter)
+        use_noisy = self.get_parameter("use_noisy_gps").get_parameter_value().bool_value
+        waypoint_topic = "/drone_control/waypoint/gps_noisy" if use_noisy else "/drone_control/waypoint/gps"
         self.create_subscription(
             NavSatFix,
-            "/drone_control/waypoint/gps",
+            waypoint_topic,
             self._on_waypoint_gps,
             10,
         )
-        self.get_logger().info("Subscribing to GPS waypoints on: /drone_control/waypoint/gps")
+        self.get_logger().info(f"Subscribing to GPS waypoints on: {waypoint_topic} (noisy={use_noisy})")
 
         # Publishers - use setpoint_raw/global for GPS navigation with altitude frame control
         self._setpoint_pub = self.create_publisher(

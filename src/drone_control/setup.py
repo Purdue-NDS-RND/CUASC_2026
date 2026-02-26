@@ -12,6 +12,7 @@ setup(
         ("share/" + package_name + "/launch", [
             "launch/target_demo.launch.py",
             "launch/waypoint_demo.launch.py",
+            "launch/demo_visualizer.launch.py",
         ]),
     ],
     install_requires=["setuptools"],
@@ -28,6 +29,7 @@ setup(
             "target_visualizer = drone_control.target_visualizer:main",
             "detection_simulator = drone_control.detection_simulator:main",
             "simple_takeoff = drone_control.simple_takeoff:main",
+            "target_tracker_sim = drone_control.target_tracker_sim:main",
         ],
     },
 )

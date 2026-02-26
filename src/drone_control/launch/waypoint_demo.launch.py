@@ -38,6 +38,8 @@ def generate_launch_description() -> LaunchDescription:
     max_noise_m = LaunchConfiguration("max_noise_m")
     min_noise_m = LaunchConfiguration("min_noise_m")
     noise_falloff_dist_m = LaunchConfiguration("noise_falloff_dist_m")
+    target_type = LaunchConfiguration("target_type")
+    use_noisy_gps = LaunchConfiguration("use_noisy_gps")
 
     # Target spawner - spawns objects and publishes positions
     spawner_node = Node(
@@ -55,6 +57,7 @@ def generate_launch_description() -> LaunchDescription:
             {"max_noise_m": max_noise_m},
             {"min_noise_m": min_noise_m},
             {"noise_falloff_dist_m": noise_falloff_dist_m},
+            {"target_type": target_type},
         ],
     )
 
@@ -80,6 +83,7 @@ def generate_launch_description() -> LaunchDescription:
             {"max_waypoints": max_waypoints},
             {"return_to_launch": return_to_launch},
             {"use_noisy_position": use_noisy_position},
+            {"use_noisy_gps": use_noisy_gps},
         ],
     )
 
@@ -145,6 +149,16 @@ def generate_launch_description() -> LaunchDescription:
                 "noise_falloff_dist_m",
                 default_value="50.0",
                 description="Distance at which noise is maximum",
+            ),
+            DeclareLaunchArgument(
+                "target_type",
+                default_value="bw_target",
+                description="Target type: 'red_box' or 'bw_target' (black-white GCP marker)",
+            ),
+            DeclareLaunchArgument(
+                "use_noisy_gps",
+                default_value="false",
+                description="Use noisy GPS for navigation (subscribe to /drone_control/waypoint/gps_noisy)",
             ),
             # Nodes
             takeoff_node,

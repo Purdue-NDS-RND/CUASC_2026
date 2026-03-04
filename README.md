@@ -59,6 +59,15 @@ cd ~/Downloads
 wget https://raw.githubusercontent.com/mavlink/mavros/ros2/mavros/scripts/install_geographiclib_datasets.sh
 sudo ./install_geographiclib_datasets.sh
 
+BOOT SIMULATION
+-----------------------
+To start the simulation, run the following command in a terminal:
+Launch sim:
+ros2 launch ardupilot_gz_bringup iris_runway.launch.py
+Connect MAVROS:
+ros2 launch mavros apm.launch.py fcu_url:=udp://:14550@
+
+
 
 
 Drone Control (Target Spawner + Follower)
@@ -92,7 +101,23 @@ Run
    - `colcon build --packages-select drone_control`
    - `source install/setup.bash`
 2) Launch:
-   - `ros2 launch drone_control target_demo.launch.py`
+   - `ros2 launch {package} {launch_file}`
+    - Example: `ros2 launch drone_control waypoint_demo.launch.py`
+
+Bashrc Recommendation
+-----------------------
+To avoid having to source the workspace every time, you can add the following line to your .bashrc file:
+
+ROS2:
+source /opt/ros/humble/setup.bash
+source ~/Programming/VTOL_ws/install/setup.bash
+alias build='colcon build  && source install/setup.bash'
+
+Gazebo:
+export GZ_VERSION=harmonic
+export PATH=$PATH:/home/ppatel/Programming/VTOL_ws/Micro-XRCE-DDS-Gen/scripts
+
+
 
 Simple takeoff (no targets)
 ---------------------------
@@ -104,10 +129,4 @@ Useful params:
 - `takeoff_altitude_m` (default `20.0`)
 - `arm_on_start` (default `true`)
 
-Useful launch params
-- `world_name` (default `iris_runway`)
-- `spawn_service` (default `/world/map/create`)
-- `radius_m`, `hover_radius_m`, `hover_duration_s`, `target_altitude_m`
 
-Example:
-- `ros2 launch drone_control target_demo.launch.py radius_m:=50.0 target_altitude_m:=25.0`

@@ -6,4 +6,4 @@ NDS02 is almost fully setup. The following needs to be done:
 
 Currently, these work:
 
-* ros2 launch vision_pipeline vision_demo.launch.py
+* Launch drone into air

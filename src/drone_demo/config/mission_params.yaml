@@ -10,10 +10,10 @@ simple_takeoff_service:
 
 waypoint_demo_mission:
   ros__parameters:
-    takeoff_altitude_m: 20.0
+    takeoff_altitude_m: 10.0
     waypoint_altitude_m: 20.0
-    arrival_radius_m: 3.0
+    arrival_radius_m: 1.0
     arrival_height_tolerance_m: 2.0
-    hold_time_s: 4.0
+    hold_time_s: 2.0
     setpoint_rate_hz: 20.0
     rtl_mode: "RTL"

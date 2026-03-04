@@ -4,21 +4,19 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
-from ament_index_python.packages import get_package_share_directory
-
 
 def generate_launch_description() -> LaunchDescription:
-    pkg_share = get_package_share_directory("drone_demo")
-    default_params = pkg_share + "/config/mission_params.yaml"
-
     config = PathJoinSubstitution([
         FindPackageShare("drone_demo"),
         LaunchConfiguration("config")
     ])
-    params = LaunchConfiguration("params")
+    params = PathJoinSubstitution([
+        FindPackageShare("drone_demo"),
+        LaunchConfiguration("params")
+    ])
 
     takeoff_service_node = Node(
-        package="drone_demo",
+        package="drone_utils",
         executable="simple_takeoff_service",
         name="simple_takeoff_service",
         output="screen",
@@ -42,8 +40,8 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "params",
-                default_value=default_params,
-                description="Path to ROS params YAML file (passed as --params-file)",
+                default_value="config/mission_params.yaml",
+                description="Path to ROS params YAML file relative to package share (passed as --params-file)",
             ),
             takeoff_service_node,
             mission_node,

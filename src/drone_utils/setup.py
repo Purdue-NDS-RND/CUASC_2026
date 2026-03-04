@@ -1,7 +1,6 @@
 from setuptools import find_packages, setup
-from glob import glob
 
-package_name = 'drone_demo'
+package_name = 'drone_utils'
 
 setup(
     name=package_name,
@@ -11,8 +10,6 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
-        ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -27,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'waypoint_demo_mission = drone_demo.waypoint_demo_mission:main',
+            'simple_takeoff_service = drone_utils.simple_takeoff_service:main',
         ],
     },
 )

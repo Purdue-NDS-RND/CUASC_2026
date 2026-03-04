@@ -47,7 +47,7 @@ import rclpy
 from rclpy.node import Node
 
 from mavros_msgs.msg import State
-from mavros_msgs.srv import CommandBool, CommandTOL
+from mavros_msgs.srv import CommandBool, CommandTOL, SetMode
 
 
 class SimpleTakeoffService(Node):
@@ -55,22 +55,37 @@ class SimpleTakeoffService(Node):
         super().__init__("simple_takeoff_service")
 
         self.declare_parameter("default_takeoff_altitude_m", 20.0)
-        self.declare_parameter("arm_check_delay_s", 0.5)
+        self.declare_parameter("guided_mode_name", "GUIDED")
+        self.declare_parameter("mode_retry_s", 2.0)
+        self.declare_parameter("arm_retry_s", 5.0)
+        self.declare_parameter("max_arm_attempts", 5)
+        self.declare_parameter("takeoff_retry_s", 5.0)
+        self.declare_parameter("loop_rate_hz", 2.0)
 
         self._state: Optional[State] = None
         self._pending_altitude_m: Optional[float] = None
-        self._arm_check_timer = None
+        self._takeoff_sent = False
+
+        self._last_mode_request = None
+        self._last_arm_request = None
+        self._last_takeoff_request = None
+        self._arm_attempts = 0
+        self._warned_arm_stop = False
 
         self.create_subscription(State, "/mavros/state", self._on_state, 10)
 
         self._arm_client = self.create_client(CommandBool, "/mavros/cmd/arming")
         self._takeoff_client = self.create_client(CommandTOL, "/mavros/cmd/takeoff")
+        self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
 
         self._takeoff_service = self.create_service(
             CommandTOL,
             "/drone_demo/takeoff",
             self._on_takeoff_service,
         )
+
+        rate = self.get_parameter("loop_rate_hz").get_parameter_value().double_value
+        self._timer = self.create_timer(1.0 / max(rate, 1.0), self._on_timer)
 
         self.get_logger().info("Simple takeoff service ready on /drone_demo/takeoff")
 
@@ -82,16 +97,10 @@ class SimpleTakeoffService(Node):
         request: CommandTOL.Request,
         response: CommandTOL.Response,
     ) -> CommandTOL.Response:
-        if self._pending_altitude_m is not None:
+        if self._pending_altitude_m is not None and not self._takeoff_sent:
             response.success = False
             response.result = 0
             self.get_logger().warn("Takeoff already in progress")
-            return response
-
-        if not self._arm_client.service_is_ready() or not self._takeoff_client.service_is_ready():
-            response.success = False
-            response.result = 0
-            self.get_logger().warn("Arming/takeoff service not ready")
             return response
 
         altitude = request.altitude
@@ -103,71 +112,96 @@ class SimpleTakeoffService(Node):
             )
 
         self._pending_altitude_m = float(altitude)
-
-        arm_req = CommandBool.Request()
-        arm_req.value = True
-        arm_future = self._arm_client.call_async(arm_req)
-        arm_future.add_done_callback(self._on_arm_done)
+        self._takeoff_sent = False
+        self._arm_attempts = 0
+        self._warned_arm_stop = False
+        self._last_mode_request = None
+        self._last_arm_request = None
+        self._last_takeoff_request = None
 
         response.success = True
         response.result = 0
         self.get_logger().info(f"Takeoff sequence accepted (altitude={altitude:.1f}m)")
         return response
 
-    def _on_arm_done(self, future) -> None:
-        try:
-            result = future.result()
-            if result is None or not result.success:
-                self.get_logger().warn("Arm command failed")
-                self._pending_altitude_m = None
+    # ------------------------------------------------------------------
+    #  Timer-driven state machine (mirrors simple_takeoff.py approach)
+    # ------------------------------------------------------------------
+
+    def _on_timer(self) -> None:
+        if self._pending_altitude_m is None or self._takeoff_sent:
+            return
+        if self._state is None:
+            return
+
+        now = self.get_clock().now()
+        guided = self.get_parameter("guided_mode_name").get_parameter_value().string_value
+
+        # Step 1: wait for GUIDED mode to be confirmed by FCU
+        if self._state.mode != guided:
+            if self._ready_for_request(now, self._last_mode_request, "mode_retry_s"):
+                self._request_mode(guided)
+            return
+
+        # Step 2: wait for armed state to be confirmed by FCU
+        if not self._state.armed:
+            max_attempts = self.get_parameter("max_arm_attempts").get_parameter_value().integer_value
+            if self._arm_attempts >= max_attempts:
+                if not self._warned_arm_stop:
+                    self.get_logger().warn("Max arm attempts reached; aborting takeoff sequence")
+                    self._warned_arm_stop = True
+                    self._pending_altitude_m = None
                 return
-        except Exception as exc:
-            self.get_logger().error(f"Arm service call failed: {exc}")
-            self._pending_altitude_m = None
+            if self._ready_for_request(now, self._last_arm_request, "arm_retry_s"):
+                self._request_arm(True)
+                self._arm_attempts += 1
             return
 
-        delay = (
-            self.get_parameter("arm_check_delay_s")
-            .get_parameter_value()
-            .double_value
-        )
-        if self._arm_check_timer is not None:
-            self._arm_check_timer.cancel()
-        self._arm_check_timer = self.create_timer(max(delay, 0.0), self._check_armed_and_takeoff)
+        # Step 3: send takeoff command once armed
+        if self._ready_for_request(now, self._last_takeoff_request, "takeoff_retry_s"):
+            self._request_takeoff(self._pending_altitude_m)
+            self._takeoff_sent = True
 
-    def _check_armed_and_takeoff(self) -> None:
-        if self._arm_check_timer is not None:
-            self._arm_check_timer.cancel()
-            self._arm_check_timer = None
+    def _ready_for_request(self, now, last_time, param_name: str) -> bool:
+        if last_time is None:
+            return True
+        retry = self.get_parameter(param_name).get_parameter_value().double_value
+        return (now - last_time).nanoseconds / 1e9 >= retry
 
-        if self._pending_altitude_m is None:
+    def _request_mode(self, mode: str) -> None:
+        if not self._mode_client.service_is_ready():
+            self.get_logger().warn("Set mode service not available")
             return
+        req = SetMode.Request()
+        req.base_mode = 0
+        req.custom_mode = mode
+        self._mode_client.call_async(req)
+        self._last_mode_request = self.get_clock().now()
+        self.get_logger().info(f"Requesting mode: {mode}")
 
-        if self._state is None or not self._state.armed:
-            self.get_logger().warn("Vehicle did not report armed state after arm command")
-            self._pending_altitude_m = None
+    def _request_arm(self, arm: bool) -> None:
+        if not self._arm_client.service_is_ready():
+            self.get_logger().warn("Arming service not available")
             return
+        req = CommandBool.Request()
+        req.value = arm
+        self._arm_client.call_async(req)
+        self._last_arm_request = self.get_clock().now()
+        self.get_logger().info("Arming requested")
 
+    def _request_takeoff(self, altitude_m: float) -> None:
+        if not self._takeoff_client.service_is_ready():
+            self.get_logger().warn("Takeoff service not available")
+            return
         req = CommandTOL.Request()
-        req.altitude = float(self._pending_altitude_m)
+        req.altitude = float(altitude_m)
         req.min_pitch = 0.0
         req.yaw = 0.0
         req.latitude = 0.0
         req.longitude = 0.0
-        takeoff_future = self._takeoff_client.call_async(req)
-        takeoff_future.add_done_callback(self._on_takeoff_done)
-
-    def _on_takeoff_done(self, future) -> None:
-        try:
-            result = future.result()
-            if result is None or not result.success:
-                self.get_logger().warn("Takeoff command failed")
-            else:
-                self.get_logger().info("Takeoff command sent")
-        except Exception as exc:
-            self.get_logger().error(f"Takeoff service call failed: {exc}")
-        finally:
-            self._pending_altitude_m = None
+        self._takeoff_client.call_async(req)
+        self._last_takeoff_request = self.get_clock().now()
+        self.get_logger().info(f"Takeoff command sent (altitude={altitude_m:.1f}m)")
 
 
 def main() -> None:

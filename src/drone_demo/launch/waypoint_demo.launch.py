@@ -7,18 +7,19 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description() -> LaunchDescription:
-    default_config = (
-        get_package_share_directory("drone_demo") + "/config/mission_square.yaml"
-    )
+    pkg_share = get_package_share_directory("drone_demo")
+    default_config = pkg_share + "/config/mission_square.yaml"
+    default_params = pkg_share + "/config/mission_square_params.yaml"
 
     config = LaunchConfiguration("config")
+    params = LaunchConfiguration("params")
 
     takeoff_service_node = Node(
         package="drone_demo",
         executable="simple_takeoff_service",
         name="simple_takeoff_service",
         output="screen",
-        parameters=[config],
+        parameters=[params],
     )
 
     mission_node = Node(
@@ -26,7 +27,7 @@ def generate_launch_description() -> LaunchDescription:
         executable="waypoint_demo_mission",
         name="waypoint_demo_mission",
         output="screen",
-        parameters=[config, {"config_file": config}],
+        parameters=[params, {"config_file": config}],
     )
 
     return LaunchDescription(
@@ -34,7 +35,12 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "config",
                 default_value=default_config,
-                description="Path to mission YAML config",
+                description="Path to mission YAML file (waypoints read directly by node)",
+            ),
+            DeclareLaunchArgument(
+                "params",
+                default_value=default_params,
+                description="Path to ROS params YAML file (passed as --params-file)",
             ),
             takeoff_service_node,
             mission_node,

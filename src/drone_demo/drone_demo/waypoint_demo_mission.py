@@ -56,7 +56,7 @@ Parameters:
   rtl_mode                    (string, "RTL")
       MAVROS custom-mode string sent after the last waypoint.
 
-Config file (mission_square.yaml):
+Config file (waypoint_square.yaml):
   The file has two sections:
   1. ``waypoint_demo_mission.ros__parameters`` – loaded as ROS params by
      the launch file (all non-waypoint tuning knobs).

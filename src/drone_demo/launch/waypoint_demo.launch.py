@@ -1,17 +1,20 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description() -> LaunchDescription:
     pkg_share = get_package_share_directory("drone_demo")
-    default_config = pkg_share + "/config/mission_square.yaml"
-    default_params = pkg_share + "/config/mission_square_params.yaml"
+    default_params = pkg_share + "/config/mission_params.yaml"
 
-    config = LaunchConfiguration("config")
+    config = PathJoinSubstitution([
+        FindPackageShare("drone_demo"),
+        LaunchConfiguration("config")
+    ])
     params = LaunchConfiguration("params")
 
     takeoff_service_node = Node(
@@ -34,8 +37,8 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument(
                 "config",
-                default_value=default_config,
-                description="Path to mission YAML file (waypoints read directly by node)",
+                default_value="config/waypoint_square.yaml",
+                description="Path to mission YAML file relative to package share (waypoints read directly by node)",
             ),
             DeclareLaunchArgument(
                 "params",

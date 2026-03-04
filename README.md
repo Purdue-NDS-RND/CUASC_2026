@@ -152,18 +152,44 @@ ros2 launch drone_control waypoint_demo.launch.py
 
 ## ✈️ Simple Takeoff (no targets)
 
-Runs a minimal node that switches to GUIDED, arms, and climbs to 20 m above the current position.
+Handles mode switching, arming, and takeoff via MAVROS. **Only takes off when explicitly requested via service call.**
+
+> **Prerequisites:** Must have ArduPilot SITL + Gazebo + MAVROS running first
+
+### Service-Based Manual Takeoff
+
+Start the node and trigger takeoff when ready:
 
 ```bash
+# Terminal 1: Start Gazebo + ArduPilot SITL + MAVROS
+ros2 launch ardupilot_gz_bringup iris_runway.launch.py
+
+# Terminal 2: Run the takeoff node
 ros2 run drone_control simple_takeoff
+
+# Terminal 3: Trigger takeoff when ready
+ros2 service call /drone_control/takeoff mavros_msgs/srv/CommandTOL \
+  "{altitude: 25.0, min_pitch: 0.0, yaw: 0.0}"
+```
+
+### Auto Takeoff (Optional)
+
+To enable automatic takeoff on startup:
+
+```bash
+ros2 run drone_control simple_takeoff --ros-args -p auto_takeoff:=true
 ```
 
 **Parameters:**
 
-| Parameter | Default |
-|-----------|---------|
-| `takeoff_altitude_m` | `20.0` |
-| `arm_on_start` | `true` |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `takeoff_altitude_m` | `20.0` | Default takeoff altitude |
+| `auto_takeoff` | `true` | Takeoff automatically on startup |
+| `arm_on_start` | `true` | Arm automatically |
+| `set_guided_mode` | `true` | Switch to guided mode |
+| `guided_mode_name` | `"GUIDED"` | Flight mode name |
+| `max_arm_attempts` | `5` | Max arming retries |
 
 ---
 

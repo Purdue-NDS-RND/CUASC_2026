@@ -16,22 +16,18 @@ class SimpleTakeoff(Node):
         self.declare_parameter("takeoff_altitude_m", 20.0)
         self.declare_parameter("takeoff_min_pitch", 0.0)
         self.declare_parameter("takeoff_yaw", 0.0)
-        self.declare_parameter("use_setpoint_stream", False)
-        self.declare_parameter("setpoint_rate_hz", 10.0)
-        self.declare_parameter("setpoint_warmup_s", 2.0)
+        self.declare_parameter("setpoint_rate_hz", 2.0)
         self.declare_parameter("arm_on_start", True)
         self.declare_parameter("set_guided_mode", True)
         self.declare_parameter("guided_mode_name", "GUIDED")
         self.declare_parameter("arm_retry_s", 5.0)
         self.declare_parameter("mode_retry_s", 2.0)
         self.declare_parameter("max_arm_attempts", 5)
-        self.declare_parameter("auto_takeoff", True)
         self.declare_parameter("takeoff_retry_s", 5.0)
         self.declare_parameter("max_takeoff_attempts", 5)
 
         self._state: Optional[State] = None
         self._pose: Optional[PoseStamped] = None
-        self._target_pose: Optional[PoseStamped] = None
         self._last_arm_request = None
         self._last_mode_request = None
         self._arm_attempts = 0
@@ -44,7 +40,6 @@ class SimpleTakeoff(Node):
         self._requested_altitude_m = None
         self._requested_min_pitch = 0.0
         self._requested_yaw = 0.0
-        self._setpoint_sent = False
         self._gimbal_down_sent = False
 
         self.create_subscription(State, "/mavros/state", self._on_state, 10)
@@ -55,12 +50,10 @@ class SimpleTakeoff(Node):
             qos_profile_sensor_data,
         )
 
-        self._setpoint_pub = self.create_publisher(
-            PoseStamped, "/mavros/setpoint_position/local", 10
-        )
         self._arm_client = self.create_client(CommandBool, "/mavros/cmd/arming")
         self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
         self._takeoff_client = self.create_client(CommandTOL, "/mavros/cmd/takeoff")
+        self._gimbal_client = self.create_client(GimbalManagerPitchyaw, "/mavros/gimbal_control/manager/pitchyaw")
 
         self._takeoff_service = self.create_service(
             CommandTOL, "/drone_control/takeoff", self._on_takeoff_service
@@ -73,31 +66,12 @@ class SimpleTakeoff(Node):
         self._state = msg
 
     def _on_pose(self, msg: PoseStamped) -> None:
-        if self._takeoff_requested and self._target_pose is None and self._use_setpoint_stream():
-            self._target_pose = PoseStamped()
-            self._target_pose.header.frame_id = msg.header.frame_id
-            self._target_pose.pose.position.x = msg.pose.position.x
-            self._target_pose.pose.position.y = msg.pose.position.y
-            self._target_pose.pose.position.z = msg.pose.position.z + float(
-                self._requested_altitude_m or self.get_parameter("takeoff_altitude_m")
-                .get_parameter_value()
-                .double_value
-            )
-            self._target_pose.pose.orientation.w = 1.0
-            self.get_logger().info(
-                "Takeoff target set at x=%.2f, y=%.2f, z=%.2f"
-                % (
-                    self._target_pose.pose.position.x,
-                    self._target_pose.pose.position.y,
-                    self._target_pose.pose.position.z,
-                )
-            )
         self._pose = msg
 
     def _on_timer(self) -> None:
-        self._publish_setpoint()
         self._handle_mode_and_arming()
         self._set_gimbal_down()
+
     def _set_gimbal_down(self) -> None:
         if self._gimbal_down_sent:
             return
@@ -108,8 +82,7 @@ class SimpleTakeoff(Node):
         if self._pose is None:
             return
         
-        gimbal_client = self.create_client(GimbalManagerPitchyaw, "/mavros/gimbal_control/manager/pitchyaw")
-        if not gimbal_client.service_is_ready():
+        if not self._gimbal_client.service_is_ready():
             self.get_logger().warn("Gimbal control service not available")
             return
         req = GimbalManagerPitchyaw.Request()
@@ -118,22 +91,11 @@ class SimpleTakeoff(Node):
         req.pitch_rate = float('nan')
         req.yaw_rate = float('nan')
         req.flags = 0
-        gimbal_client.call_async(req)
+        self._gimbal_client.call_async(req)
         self._gimbal_down_sent = True   
 
 
 
-
-    def _publish_setpoint(self) -> None:
-        if not self._use_setpoint_stream():
-            return
-        if self._target_pose is None:
-            return
-        if self._setpoint_sent:
-            return
-        self._target_pose.header.stamp = self.get_clock().now().to_msg()
-        self._setpoint_pub.publish(self._target_pose)
-        self._setpoint_sent = True
 
     def _handle_mode_and_arming(self) -> None:
         if not self._takeoff_requested:
@@ -275,8 +237,6 @@ class SimpleTakeoff(Node):
         self._warned_takeoff_stop = False
         self._arm_attempts = 0
         self._warned_arm_stop = False
-        self._setpoint_sent = False
-        self._target_pose = None
 
         if self.get_parameter("set_guided_mode").get_parameter_value().bool_value:
             guided = self.get_parameter("guided_mode_name").get_parameter_value().string_value
@@ -294,9 +254,6 @@ class SimpleTakeoff(Node):
             % (altitude, request.min_pitch, request.yaw)
         )
         return response
-
-    def _use_setpoint_stream(self) -> bool:
-        return self.get_parameter("use_setpoint_stream").get_parameter_value().bool_value
 
 
 def main() -> None:

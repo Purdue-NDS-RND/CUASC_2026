@@ -36,10 +36,7 @@ if [ "$clean" -eq 1 ]; then
 	rm -rf build/drone_* install/drone_* log/latest_build/drone_* log/latest_test/drone_*
 fi
 
-
-
-#colcon build --packages-select $packages
-colcon build --packages-select $packages --cmake-clean-cache --cmake-force-configure
+colcon build --packages-select $packages
 
 
 source install/setup.bash

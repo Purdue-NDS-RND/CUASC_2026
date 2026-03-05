@@ -1,9 +1,5 @@
-from typing import Optional
-
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-
 from mavros_msgs.srv import GimbalManagerPitchyaw
 
 
@@ -16,14 +12,11 @@ class Gimble_PointService(Node):
         self._gimbal_client = self.create_client(GimbalManagerPitchyaw, "/mavros/gimbal_control/manager/pitchyaw")
 
     def set_gimbal_point_callback(self, request: GimbalManagerPitchyaw.Request, response: GimbalManagerPitchyaw.Response) -> GimbalManagerPitchyaw.Response:
+        self.get_logger().info(f"Received gimbal point request: pitch={request.pitch:.2f}°, yaw={request.yaw:.2f}°")
         self._set_gimbal(request.pitch, request.yaw)
         response.success = True
         response.result = 0
         return response
-
-
-    def _on_timer(self) -> None:
-        self._set_gimbal(-90.0)
 
     def _set_gimbal(self, pitch: float, yaw: float = 0.0) -> None:
         req = GimbalManagerPitchyaw.Request()
@@ -32,6 +25,7 @@ class Gimble_PointService(Node):
         req.pitch_rate = float('nan')
         req.yaw_rate = float('nan')
         req.flags = 0
+        self.get_logger().info(f"Setting gimbal to pitch={pitch:.2f}°, yaw={yaw:.2f}°")
         self._gimbal_client.call_async(req)
 
 

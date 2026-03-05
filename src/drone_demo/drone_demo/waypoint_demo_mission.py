@@ -33,7 +33,7 @@ Subscriptions:
   /mavros/local_position/pose (geometry_msgs/PoseStamped) – ENU position
 
 Service Clients:
-  /drone_demo/takeoff   (mavros_msgs/CommandTOL) – trigger arm + takeoff
+  drone_utils/takeoff   (mavros_msgs/CommandTOL) – trigger arm + takeoff
   /mavros/set_mode      (mavros_msgs/SetMode)    – switch to RTL at end
 
 Parameters:
@@ -53,6 +53,8 @@ Parameters:
       Seconds to hold position at each waypoint before advancing.
   setpoint_rate_hz            (double, 20.0)
       Rate of the main control-loop timer and setpoint publishing.
+  desired_yaw_deg             (double, 90.0)
+      Desired yaw angle in degrees (0° = East, 90° = North, 180° = West, 270° = South).
   rtl_mode                    (string, "RTL")
       MAVROS custom-mode string sent after the last waypoint.
 
@@ -125,6 +127,7 @@ class WaypointDemoMission(Node):
         self.declare_parameter("arrival_height_tolerance_m", 2.0)
         self.declare_parameter("hold_time_s", 3.0)
         self.declare_parameter("setpoint_rate_hz", 20.0)
+        self.declare_parameter("desired_yaw_deg", 90.0)
         self.declare_parameter("rtl_mode", "RTL")
 
         # ── Internal state ───────────────────────────────────────
@@ -158,7 +161,7 @@ class WaypointDemoMission(Node):
         )
 
         # ── Service clients ──────────────────────────────────────
-        self._takeoff_client = self.create_client(CommandTOL, "/drone_demo/takeoff")
+        self._takeoff_client = self.create_client(CommandTOL, "drone_utils/takeoff")
         self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
 
         # ── Timer (main control loop) ────────────────────────────
@@ -397,7 +400,15 @@ class WaypointDemoMission(Node):
         msg.pose.position.x = x
         msg.pose.position.y = y
         msg.pose.position.z = z
-        msg.pose.orientation.w = 1.0  # identity quaternion (yaw = 0)
+        
+        # Convert desired yaw (in degrees) to quaternion
+        yaw_deg = self.get_parameter("desired_yaw_deg").get_parameter_value().double_value
+        yaw_rad = math.radians(yaw_deg)
+        msg.pose.orientation.w = math.cos(yaw_rad / 2.0)
+        msg.pose.orientation.x = 0.0
+        msg.pose.orientation.y = 0.0
+        msg.pose.orientation.z = math.sin(yaw_rad / 2.0)
+        
         return msg
 
     def _publish_setpoint(self) -> None:

@@ -1,19 +1,19 @@
 """Simple Takeoff Service Node
 
-Provides a lightweight /drone_demo/takeoff service that sequentially arms
+Provides a lightweight drone_utils/takeoff service that sequentially arms
 the vehicle and sends a takeoff command via MAVROS.  Intentionally minimal
 — no mode switching, no retries, no altitude monitoring.  Designed as a
 reusable building block for demo launch files.
 
 Flow:
-  1. Idle until a service call arrives on /drone_demo/takeoff
+  1. Idle until a service call arrives on drone_utils/takeoff
   2. Send arm command  (/mavros/cmd/arming)
   3. Wait arm_check_delay_s, then verify armed state
   4. Send takeoff command (/mavros/cmd/takeoff) at requested altitude
   5. Return to idle (ready for another call)
 
 Service Provided:
-  /drone_demo/takeoff (mavros_msgs/CommandTOL)
+  drone_utils/takeoff (mavros_msgs/CommandTOL)
       request.altitude  – target altitude in metres (0 → uses default param)
       response.success  – True if sequence was accepted
 
@@ -32,12 +32,12 @@ Parameters:
       Seconds to wait after the arm command before checking armed state.
 
 Usage:
-  ros2 run drone_demo simple_takeoff_service
-  ros2 run drone_demo simple_takeoff_service --ros-args \
+  ros2 run drone_utils simple_takeoff_service
+  ros2 run drone_utils simple_takeoff_service --ros-args \
       -p default_takeoff_altitude_m:=30.0
 
   # Trigger from another terminal:
-  ros2 service call /drone_demo/takeoff mavros_msgs/srv/CommandTOL \
+  ros2 service call drone_utils/takeoff mavros_msgs/srv/CommandTOL \
       "{altitude: 25.0}"
 """
 
@@ -80,14 +80,14 @@ class SimpleTakeoffService(Node):
 
         self._takeoff_service = self.create_service(
             CommandTOL,
-            "/drone_demo/takeoff",
+            "drone_utils/takeoff",
             self._on_takeoff_service,
         )
 
         rate = self.get_parameter("loop_rate_hz").get_parameter_value().double_value
         self._timer = self.create_timer(1.0 / max(rate, 1.0), self._on_timer)
 
-        self.get_logger().info("Simple takeoff service ready on /drone_demo/takeoff")
+        self.get_logger().info("Simple takeoff service ready on drone_utils/takeoff")
 
     def _on_state(self, msg: State) -> None:
         self._state = msg

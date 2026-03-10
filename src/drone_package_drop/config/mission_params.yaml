@@ -7,6 +7,10 @@ simple_takeoff_service:
     max_arm_attempts: 5
     takeoff_retry_s: 5.0
     loop_rate_hz: 2.0
+    stream_rate_hz: 20
+    required_topics:
+      - "/mavros/local_position/pose"
+      - "/mavros/imu/data"
 
 # Simulation Start Pos
 #latitude: -35.3632621

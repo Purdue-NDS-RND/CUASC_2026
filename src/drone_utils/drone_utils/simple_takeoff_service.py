@@ -1,16 +1,22 @@
 """Simple Takeoff Service Node
 
 Provides a lightweight drone_utils/takeoff service that sequentially arms
-the vehicle and sends a takeoff command via MAVROS.  Intentionally minimal
-— no mode switching, no retries, no altitude monitoring.  Designed as a
+the vehicle and sends a takeoff command via MAVROS.  Designed as a
 reusable building block for demo launch files.
+
+On real hardware the Pixhawk does not automatically stream all telemetry
+the way SITL does.  This node therefore requests MAVLink data streams
+from the FCU as soon as MAVROS reports *connected*, and waits until
+a configurable set of topics have published at least once before
+proceeding to arm and take off.
 
 Flow:
   1. Idle until a service call arrives on drone_utils/takeoff
-  2. Send arm command  (/mavros/cmd/arming)
-  3. Wait arm_check_delay_s, then verify armed state
-  4. Send takeoff command (/mavros/cmd/takeoff) at requested altitude
-  5. Return to idle (ready for another call)
+  2. Wait for MAVROS connection
+  3. Request MAVLink streams from the FCU (StreamRate service)
+  4. Wait for required telemetry topics to start publishing
+  5. Switch to GUIDED, arm, take off
+  6. Return to idle (ready for another call)
 
 Service Provided:
   drone_utils/takeoff (mavros_msgs/CommandTOL)
@@ -19,17 +25,25 @@ Service Provided:
 
 Subscriptions:
   /mavros/state (mavros_msgs/State)
-      Used only for the single post-arm check
+      Connection and armed state.
+  Each topic listed in the required_topics parameter is subscribed to
+  with a one-shot callback that marks the topic as live.
 
 Service Clients:
-  /mavros/cmd/arming   (mavros_msgs/CommandBool)  – arm / disarm
-  /mavros/cmd/takeoff   (mavros_msgs/CommandTOL)   – MAVROS takeoff
+  /mavros/cmd/arming       (mavros_msgs/CommandBool)     – arm / disarm
+  /mavros/cmd/takeoff      (mavros_msgs/CommandTOL)      – MAVROS takeoff
+  /mavros/set_mode         (mavros_msgs/SetMode)         – flight mode
+  /mavros/set_stream_rate  (mavros_msgs/StreamRate)       – MAVLink streams
 
 Parameters:
   default_takeoff_altitude_m  (double, 20.0)
       Altitude used when the caller passes altitude <= 0.
-  arm_check_delay_s           (double, 0.5)
-      Seconds to wait after the arm command before checking armed state.
+  stream_rate_hz              (int, 20)
+      MAVLink stream rate to request from the FCU.
+  required_topics             (string[], see defaults)
+      List of MAVROS topics that must publish at least once before
+      the takeoff sequence proceeds.  Supported topics are those
+      listed in TOPIC_TYPE_MAP inside this file.
 
 Usage:
   ros2 run drone_utils simple_takeoff_service
@@ -45,9 +59,20 @@ from typing import Optional
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
+from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import Imu, NavSatFix
 from mavros_msgs.msg import State
-from mavros_msgs.srv import CommandBool, CommandTOL, SetMode
+from mavros_msgs.srv import CommandBool, CommandTOL, SetMode, StreamRate
+
+# Map of topic names to their message types.
+# Add entries here to support additional required_topics values.
+TOPIC_TYPE_MAP: dict[str, type] = {
+    "/mavros/local_position/pose": PoseStamped,
+    "/mavros/imu/data": Imu,
+    "/mavros/global_position/global": NavSatFix,
+}
 
 
 class SimpleTakeoffService(Node):
@@ -61,6 +86,11 @@ class SimpleTakeoffService(Node):
         self.declare_parameter("max_arm_attempts", 5)
         self.declare_parameter("takeoff_retry_s", 5.0)
         self.declare_parameter("loop_rate_hz", 2.0)
+        self.declare_parameter("stream_rate_hz", 20)
+        self.declare_parameter("required_topics", [
+            "/mavros/local_position/pose",
+            "/mavros/imu/data",
+        ])
 
         self._state: Optional[State] = None
         self._pending_altitude_m: Optional[float] = None
@@ -72,11 +102,47 @@ class SimpleTakeoffService(Node):
         self._arm_attempts = 0
         self._warned_arm_stop = False
 
+        # ── Stream / telemetry health tracking ────────────────────
+        self._streams_requested = False
+        self._last_stream_log = None  # throttle "waiting" log
+
+        topic_names = (
+            self.get_parameter("required_topics")
+            .get_parameter_value()
+            .string_array_value
+        )
+        self._topic_received: dict[str, bool] = {}
+        for topic in topic_names:
+            msg_type = TOPIC_TYPE_MAP.get(topic)
+            if msg_type is None:
+                self.get_logger().error(
+                    f"required_topics: '{topic}' has no entry in TOPIC_TYPE_MAP — skipping"
+                )
+                continue
+            self._topic_received[topic] = False
+            # One-shot callback: flip flag on first message
+            self.create_subscription(
+                msg_type,
+                topic,
+                lambda _msg, t=topic: self._mark_topic_received(t),
+                qos_profile_sensor_data,
+            )
+
+        if self._topic_received:
+            self.get_logger().info(
+                f"Will verify topics before takeoff: {list(self._topic_received.keys())}"
+            )
+        else:
+            self.get_logger().info("No required_topics configured — stream check disabled")
+
+        # ── Subscriptions ─────────────────────────────────────────
         self.create_subscription(State, "/mavros/state", self._on_state, 10)
 
+        # ── Service clients ───────────────────────────────────────
         self._arm_client = self.create_client(CommandBool, "/mavros/cmd/arming")
         self._takeoff_client = self.create_client(CommandTOL, "/mavros/cmd/takeoff")
         self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
+        self._stream_rate_client = self.create_client(StreamRate, "/mavros/set_stream_rate")
 
         self._takeoff_service = self.create_service(
             CommandTOL,
@@ -88,6 +154,39 @@ class SimpleTakeoffService(Node):
         self._timer = self.create_timer(1.0 / max(rate, 1.0), self._on_timer)
 
         self.get_logger().info("Simple takeoff service ready on drone_utils/takeoff")
+
+    # ------------------------------------------------------------------
+    #  Stream / topic helpers
+    # ------------------------------------------------------------------
+
+    def _mark_topic_received(self, topic: str) -> None:
+        if not self._topic_received.get(topic, True):
+            self._topic_received[topic] = True
+            self.get_logger().info(f"Topic live: {topic}")
+
+    @property
+    def _all_topics_live(self) -> bool:
+        return all(self._topic_received.values())
+
+    def _request_streams(self) -> None:
+        """Send a single StreamRate request for all MAVLink stream groups."""
+        if not self._stream_rate_client.service_is_ready():
+            self.get_logger().warn(
+                "Stream rate service not available yet — will retry"
+            )
+            return
+        rate = (
+            self.get_parameter("stream_rate_hz")
+            .get_parameter_value()
+            .integer_value
+        )
+        req = StreamRate.Request()
+        req.stream_id = 0       # STREAM_ALL
+        req.message_rate = rate
+        req.on_off = True
+        self._stream_rate_client.call_async(req)
+        self._streams_requested = True
+        self.get_logger().info(f"Requested all MAVLink streams at {rate} Hz")
 
     def _on_state(self, msg: State) -> None:
         self._state = msg
@@ -135,6 +234,30 @@ class SimpleTakeoffService(Node):
             return
 
         now = self.get_clock().now()
+
+        # Step 0a: wait for MAVROS connection before requesting streams
+        if not self._state.connected:
+            return
+
+        # Step 0b: request MAVLink streams (once)
+        if not self._streams_requested:
+            self._request_streams()
+            return
+
+        # Step 0c: wait for all required topics to have published
+        if self._topic_received and not self._all_topics_live:
+            # Throttle the log to once every 5 s
+            if (
+                self._last_stream_log is None
+                or (now - self._last_stream_log).nanoseconds / 1e9 >= 5.0
+            ):
+                missing = [t for t, ok in self._topic_received.items() if not ok]
+                self.get_logger().info(
+                    f"Waiting for telemetry topics: {missing}"
+                )
+                self._last_stream_log = now
+            return
+
         guided = self.get_parameter("guided_mode_name").get_parameter_value().string_value
 
         # Step 1: wait for GUIDED mode to be confirmed by FCU

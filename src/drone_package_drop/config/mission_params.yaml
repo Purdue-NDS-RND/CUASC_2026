@@ -19,7 +19,7 @@ payload_drop:
     target_longitude: 149.1652375       # <-- SET THIS to your drop zone longitude
     transit_altitude_m: 15.0
     drop_altitude_m: 4.0
-    centering_tolerance_px: 10.0
+    centering_tolerance_px: 15.0
     arrival_radius_m: 3.0
     arrival_alt_tolerance_m: 2.0
     servo_channel: 9
@@ -27,7 +27,9 @@ payload_drop:
     servo_close_pwm: 1100
     setpoint_rate_hz: 20.0
     guided_mode_name: "GUIDED"
-    not_found_ascent_m: 1.0
+    not_found_ascent_m: 3.0
+    centering_dwell_s: 1.0    # seconds target must stay centred before descending
+    drop_hover_dwell_s: 8.0   # seconds to hover at drop altitude before releasing
 
 target_cv:
   ros__parameters:

@@ -31,6 +31,8 @@ Parameters:
   image_width_px           Camera image width in pixels       (default 640)
   image_height_px          Camera image height in pixels      (default 480)
   guided_mode_name         ArduPilot GUIDED mode string       (default "GUIDED")
+  centering_dwell_s        Seconds target must stay centred before descending (default 1.0)
+  drop_hover_dwell_s       Seconds to hover at drop altitude before releasing  (default 2.0)
 
 Subscriptions:
   /mavros/state                         (State)
@@ -132,6 +134,8 @@ class PayloadDrop(Node):
         self.declare_parameter("setpoint_rate_hz", 20.0)
         self.declare_parameter("guided_mode_name", "GUIDED")
         self.declare_parameter("not_found_ascent_m", 5.0)
+        self.declare_parameter("centering_dwell_s", 1.0)
+        self.declare_parameter("drop_hover_dwell_s", 2.0)
 
         # ── Internal state ───────────────────────────────────────────
         self._drop_state = DropState.INIT
@@ -146,6 +150,9 @@ class PayloadDrop(Node):
         self._gimbal_pointed = False
         self._drop_actuated = False
         self._recovery_altitude: Optional[float] = None
+        self._centering_dwell_start: Optional[float] = None  # wall-clock s when target first centred
+        self._drop_hover_start: Optional[float] = None       # wall-clock s when drop altitude reached
+        self._descend_hold_position: Optional[tuple[float, float]] = None  # (lat, lon) snapshotted at descent start
 
         # ── Subscribers ──────────────────────────────────────────────
         self.create_subscription(
@@ -401,7 +408,7 @@ class PayloadDrop(Node):
 
     def _handle_acquire_target(self) -> None:
         """Check whether the visual target is in the camera frame."""
-        if self._target_pixel is not None:
+        if self._target_pixel is not None and self._target_pixel.point.x >= 0 and self._target_pixel.point.y >= 0:
             # Check the detection is recent (< 2 s old)
             age = (
                 self.get_clock().now() - rclpy.time.Time.from_msg(self._target_pixel.header.stamp)
@@ -459,10 +466,19 @@ class PayloadDrop(Node):
     def _handle_center_on_target(self) -> None:
         """Centre the target in the image using local-frame velocity commands.
 
-        Drone is always pointed north (yaw = 0 in NED) so the camera axes map
-        cleanly to NED:
-          • +pixel X (target right of centre) → fly East  (+vy in NED)
-          • +pixel Y (target below centre)    → fly South (-vx in NED)
+        MAVROS setpoint_raw/local interprets velocities in ENU regardless of
+        the FRAME_LOCAL_NED coordinate_frame field.  With the drone facing
+        North the camera axes map directly to ENU:
+          • +pixel X (target right of centre) → fly East  (+vx in ENU)
+          • +pixel Y (target below centre)    → fly South (-vy in ENU)
+
+        vz is always 0 so altitude is held regardless of which altitude
+        the drone is at when this state is entered.  This state is entered
+        both before and after DESCEND; after the centering dwell completes
+        it decides the next state based on whether drop altitude has been
+        reached:
+          • above drop altitude → DESCEND
+          • at drop altitude    → DROP_PAYLOAD
 
         Publishes PositionTarget on /mavros/setpoint_raw/local instead of
         touching the GPS setpoint, which makes fine centering far more precise.
@@ -471,7 +487,7 @@ class PayloadDrop(Node):
         tol = self.get_parameter("centering_tolerance_px").get_parameter_value().double_value
 
         # Lost the target → hover in place and go back to ACQUIRE
-        if self._target_pixel is None:
+        if self._target_pixel is None or self._target_pixel.point.x < 0 or self._target_pixel.point.y < 0:
             self.get_logger().warn("Lost target during centering")
             self._publish_zero_local_velocity()
             self._transition_to(DropState.ACQUIRE_TARGET)
@@ -483,18 +499,57 @@ class PayloadDrop(Node):
 
         pixel_error = math.hypot(ex, ey)
         if pixel_error <= tol:
-            self.get_logger().info("Target centred — beginning descent")
+            dwell = (
+                self.get_parameter("centering_dwell_s")
+                .get_parameter_value()
+                .double_value
+            )
+            now_s = self.get_clock().now().nanoseconds / 1e9
+            if self._centering_dwell_start is None:
+                self._centering_dwell_start = now_s
+                self.get_logger().info(
+                    f"Target centred — must hold for {dwell:.1f}s before descending"
+                )
+            elif now_s - self._centering_dwell_start >= dwell:
+                self._centering_dwell_start = None
+                self._publish_zero_local_velocity()
+                # Decide: are we already at drop altitude?
+                drop_alt = (
+                    self.get_parameter("drop_altitude_m")
+                    .get_parameter_value()
+                    .double_value
+                )
+                alt_tol = (
+                    self.get_parameter("arrival_alt_tolerance_m")
+                    .get_parameter_value()
+                    .double_value
+                )
+                at_drop = (
+                    self._drone_local_pose is not None
+                    and abs(self._drone_local_pose.pose.position.z - drop_alt) <= alt_tol
+                )
+                if at_drop:
+                    self.get_logger().info("Centering dwell complete at drop altitude — dropping payload")
+                    self._transition_to(DropState.DROP_PAYLOAD)
+                else:
+                    self.get_logger().info("Centering dwell complete — descending")
+                    self._transition_to(DropState.DESCEND)
+                return
+            # still within dwell window — hover in place
             self._publish_zero_local_velocity()
-            self._transition_to(DropState.DESCEND)
             return
+        else:
+            # target slipped out of tolerance — reset dwell timer
+            self._centering_dwell_start = None
 
-        # ── Proportional velocity command (local NED, yaw = 0 = North) ──
+        # ── Proportional velocity command (ENU frame — MAVROS interprets
+        #    setpoint_raw/local velocities as ENU regardless of FRAME_LOCAL_NED)
         # Tune gain_mps_per_px for your camera FOV and altitude.
-        gain_mps_per_px = 0.01        # m/s per pixel of error
-        max_centering_speed_mps = 1.0  # cap so we don't overshoot
+        gain_mps_per_px = 0.02        # m/s per pixel of error
+        max_centering_speed_mps = 2.0  # cap so we don't overshoot
 
-        vx =  -ey * gain_mps_per_px   # NED North (+ey → south → negative vx)
-        vy =   ex * gain_mps_per_px   # NED East  (+ex → east → positive vy)
+        vx =  ex * gain_mps_per_px   # ENU East  (+ex → target right → fly east  → +vx)
+        vy = -ey * gain_mps_per_px   # ENU North (+ey → target below → fly south → -vy)
 
         speed = math.hypot(vx, vy)
         if speed > max_centering_speed_mps:
@@ -529,27 +584,67 @@ class PayloadDrop(Node):
     # ── DESCEND ───────────────────────────────────────────────────────
 
     def _handle_descend(self) -> None:
-        """Descend straight down to drop_altitude_m, keeping lat/lon locked."""
+        """Descend straight down to drop_altitude_m, holding yaw=North.
+
+        Lat/lon is snapshotted once on entry so that any wind nudge during
+        centering does not shift the descent column — we always come straight
+        down from the centred position.
+        """
         drop_alt = self.get_parameter("drop_altitude_m").get_parameter_value().double_value
         alt_tol = self.get_parameter("arrival_alt_tolerance_m").get_parameter_value().double_value
 
-        # Update only the altitude in the existing setpoint
-        if self._current_setpoint is not None:
-            self._current_setpoint.altitude = drop_alt
-
-        if self._drone_local_pose is None:
+        if self._drone_gps is None or self._drone_local_pose is None:
             return
+
+        # Snapshot position once on first tick of this descent
+        if self._descend_hold_position is None:
+            self._descend_hold_position = (
+                self._drone_gps.latitude,
+                self._drone_gps.longitude,
+            )
+            self.get_logger().info(
+                f"Descent locked to ({self._descend_hold_position[0]:.7f}, "
+                f"{self._descend_hold_position[1]:.7f})"
+            )
+
+        hold_lat, hold_lon = self._descend_hold_position
+
+        # Rebuild setpoint every tick using the snapshotted lat/lon and
+        # lock_yaw=True so the drone stays north-facing during descent.
+        self._current_setpoint = self._create_gps_setpoint(
+            hold_lat,
+            hold_lon,
+            drop_alt,
+            yaw=math.pi / 2,
+            lock_yaw=True,
+        )
 
         dz = abs(self._drone_local_pose.pose.position.z - drop_alt)
         if dz <= alt_tol:
-            self.get_logger().info(f"At drop altitude ({drop_alt:.1f} m) — releasing payload")
-            self._transition_to(DropState.DROP_PAYLOAD)
+            self.get_logger().info(
+                f"Reached drop altitude ({drop_alt:.1f} m) — re-centering before drop"
+            )
+            self._transition_to(DropState.CENTER_ON_TARGET)
 
     # ── DROP_PAYLOAD ──────────────────────────────────────────────────
 
     def _handle_drop_payload(self) -> None:
-        """Actuate the servo to release the payload."""
+        """Hover at drop altitude for drop_hover_dwell_s seconds, then release payload."""
         if not self._drop_actuated:
+            dwell = (
+                self.get_parameter("drop_hover_dwell_s")
+                .get_parameter_value()
+                .double_value
+            )
+            now_s = self.get_clock().now().nanoseconds / 1e9
+            if self._drop_hover_start is None:
+                self._drop_hover_start = now_s
+                self.get_logger().info(
+                    f"At drop altitude — hovering for {dwell:.1f}s before release"
+                )
+                return
+            if now_s - self._drop_hover_start < dwell:
+                return
             ch  = self.get_parameter("servo_channel").get_parameter_value().integer_value
             pwm = self.get_parameter("servo_open_pwm").get_parameter_value().integer_value
             self._send_servo_command(ch, pwm)
@@ -634,7 +729,7 @@ class PayloadDrop(Node):
         msg.velocity.x = 0.0
         msg.velocity.y = 0.0
         msg.velocity.z = 0.0
-        msg.yaw = float(90.0)  # ENU: 90° = North
+        msg.yaw = math.pi / 2  # ENU: π/2 rad = North (matches centering handler)
         self._local_setpoint_pub.publish(msg)
 
     def _request_mode(self, mode: str) -> None:

@@ -63,6 +63,11 @@ class TargetCV(Node):
         self._image_size_pub = self.create_publisher(
             PointStamped, "/drone_package_drop/image_size", 10
         )
+        # Publish annotated image for debugging (optional)
+        self._annotated_pub = self.create_publisher(
+            Image, "/drone_package_drop/annotated_image", 10
+        )
+
         self._image_size: tuple[int, int] | None = None  # (w, h) cached from stream
         
         # ── Debug display thread  ────────────────────────────────
@@ -112,6 +117,7 @@ class TargetCV(Node):
     def _detect_target_center_moments(self, image):
         annotated = image.copy()
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        blur = cv2.GaussianBlur(hsv, (5, 5), 0)
 
         # HSV thresholds for red
         lower_red1 = np.array([0,70,50])
@@ -119,8 +125,8 @@ class TargetCV(Node):
         lower_red2 = np.array([170,70,50])
         upper_red2 = np.array([180,255,255])
 
-        mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
-        mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+        mask1 = cv2.inRange(blur, lower_red1, upper_red1)
+        mask2 = cv2.inRange(blur, lower_red2, upper_red2)
         mask = cv2.bitwise_or(mask1, mask2)
 
 
@@ -169,6 +175,16 @@ class TargetCV(Node):
 
 
         annotated, center, area = self._detect_target_center_moments(frame)
+        self._annotated_pub.publish(
+            Image(
+                header=msg.header,
+                height=annotated.shape[0],
+                width=annotated.shape[1],
+                encoding="bgr8",
+                is_bigendian=0, 
+                data=annotated.tobytes()
+            )
+        )
 
         # ── Publish detection ────────────────────────────────────
         if center is not None:
@@ -181,6 +197,15 @@ class TargetCV(Node):
             det.point.z = float(area) if area is not None else 0.0
             self._detection_pub.publish(det)
             self.last_detection = (cx, cy, area)
+        else:
+            self.last_detection = None
+            det = PointStamped()
+            det.header.stamp = self.get_clock().now().to_msg()
+            det.header.frame_id = "camera"
+            det.point.x = -1.0  # Sentinel value for "not found"
+            det.point.y = -1.0
+            det.point.z = 0.0
+            self._detection_pub.publish(det)    
 
         # ── Optional debug window ────────────────────────────────
         if self._display_running:
@@ -193,7 +218,7 @@ class TargetCV(Node):
         """Runs in separate thread, displays frames from the queue."""
         while self._display_running:
             try:
-                frame = self._display_queue.get(timeout=1.0)
+                frame = self._display_queue.get(timeout=0.5)
                 cv2.imshow("TargetCV", frame)
                 cv2.waitKey(1)
             except queue.Empty:

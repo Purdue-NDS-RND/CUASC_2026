@@ -1,23 +1,22 @@
 """
 YOLO Inference Node with Image Slicing
 
-Subscribes to raw camera images, slices them, runs YOLO inference 
-(via TensorRT engine), applies NMS to remove duplicates, and 
+Subscribes to raw camera images, slices them, runs YOLO inference
+(via TensorRT engine), applies NMS to remove duplicates, and
 publishes the bounding boxes to the drone control pipeline.
 """
 
 import cv2
-import torch
 import numpy as np
-from torchvision.ops import nms
-from ultralytics import YOLO
-
 import rclpy
+import torch
+from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
+from torchvision.ops import nms
+from ultralytics import YOLO
 from vision_msgs.msg import Detection2D, ObjectHypothesisWithPose
-from cv_bridge import CvBridge
 
 
 class YoloNode(Node):
@@ -25,7 +24,7 @@ class YoloNode(Node):
         super().__init__("yolo_node")
 
         # Parameters for inference and slicing
-        self.declare_parameter("model_path", "yolo26n_v0.04.engine")
+        self.declare_parameter("model_path", "yolo26n_v1.0.engine")
         self.declare_parameter("conf_threshold", 0.50)
         self.declare_parameter("iou_threshold", 0.50)
         self.declare_parameter("slice_size", 1280)
@@ -47,7 +46,7 @@ class YoloNode(Node):
             Image,
             "/camera/image_raw",
             self._image_callback,
-            10  # Queue size
+            10,  # Queue size
         )
 
         # ---------------------------------------------------------
@@ -55,16 +54,12 @@ class YoloNode(Node):
         # ---------------------------------------------------------
         # Note: We use the exact topic name the localizer is expecting!
         self._detection_pub = self.create_publisher(
-            Detection2D, 
-            "/drone_control/detection", 
-            10
+            Detection2D, "/drone_control/detection", 10
         )
-        
+
         # Optional: A topic to view the drawn bounding boxes in RViz/rqt
         self._debug_img_pub = self.create_publisher(
-            Image, 
-            "/vision_pipeline/debug_image", 
-            10
+            Image, "/vision_pipeline/debug_image", 10
         )
 
     def _slice_image(self, image, slice_size, overlap_ratio):
@@ -103,14 +98,20 @@ class YoloNode(Node):
 
     def _image_callback(self, msg: Image) -> None:
         """This function runs EVERY TIME a new image arrives from the camera."""
-        
+
         # 1. Convert ROS Image message back to OpenCV NumPy array
         frame = self._cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        
+
         # Fetch dynamic parameters
-        conf_thresh = self.get_parameter("conf_threshold").get_parameter_value().double_value
-        iou_thresh = self.get_parameter("iou_threshold").get_parameter_value().double_value
-        slice_size = self.get_parameter("slice_size").get_parameter_value().integer_value
+        conf_thresh = (
+            self.get_parameter("conf_threshold").get_parameter_value().double_value
+        )
+        iou_thresh = (
+            self.get_parameter("iou_threshold").get_parameter_value().double_value
+        )
+        slice_size = (
+            self.get_parameter("slice_size").get_parameter_value().integer_value
+        )
         overlap = self.get_parameter("overlap_ratio").get_parameter_value().double_value
 
         # 2. Slice the image
@@ -123,14 +124,16 @@ class YoloNode(Node):
 
             for box in results[0].boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                all_boxes.append({
-                    "x1": x1 + offset_x,
-                    "y1": y1 + offset_y,
-                    "x2": x2 + offset_x,
-                    "y2": y2 + offset_y,
-                    "conf": float(box.conf[0].cpu().numpy()),
-                    "cls": int(box.cls[0].cpu().numpy()),
-                })
+                all_boxes.append(
+                    {
+                        "x1": x1 + offset_x,
+                        "y1": y1 + offset_y,
+                        "x2": x2 + offset_x,
+                        "y2": y2 + offset_y,
+                        "conf": float(box.conf[0].cpu().numpy()),
+                        "cls": int(box.cls[0].cpu().numpy()),
+                    }
+                )
 
         # 4. Apply NMS
         final_boxes = self._apply_nms(all_boxes, iou_thresh)
@@ -153,7 +156,9 @@ class YoloNode(Node):
             det_msg.bbox.size_y = height
 
             result = ObjectHypothesisWithPose()
-            result.hypothesis.class_id = str(box["cls"]) # Target Localizer expects a string ID
+            result.hypothesis.class_id = str(
+                box["cls"]
+            )  # Target Localizer expects a string ID
             result.hypothesis.score = box["conf"]
             det_msg.results.append(result)
 
@@ -167,14 +172,20 @@ class YoloNode(Node):
                     debug_frame,
                     (int(box["x1"]), int(box["y1"])),
                     (int(box["x2"]), int(box["y2"])),
-                    (0, 255, 0), 4
+                    (0, 255, 0),
+                    4,
                 )
                 label = f"Class {box['cls']}: {box['conf']:.2f}"
                 cv2.putText(
-                    debug_frame, label, (int(box["x1"]), int(box["y1"]) - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2
+                    debug_frame,
+                    label,
+                    (int(box["x1"]), int(box["y1"]) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    (0, 255, 0),
+                    2,
                 )
-            
+
             debug_msg = self._cv_bridge.cv2_to_imgmsg(debug_frame, encoding="bgr8")
             self._debug_img_pub.publish(debug_msg)
 
@@ -188,6 +199,7 @@ def main() -> None:
         pass
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()

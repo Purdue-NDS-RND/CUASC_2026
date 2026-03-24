@@ -71,6 +71,7 @@ class TargetVisualizer(Node):
         self._target_colors: Dict[str, str] = {}
         self._next_color_idx = 0
         self._estimates_json: Optional[dict] = None
+        self._spawned_target_gps: Optional[Tuple[float, float]] = None  # Direct from target_spawner
 
         # Subscribers
         self.create_subscription(
@@ -83,6 +84,13 @@ class TargetVisualizer(Node):
             String,
             "/drone_control/targets/estimates_gps",
             self._on_estimates,
+            10,
+        )
+        # Subscribe to spawned target GPS directly
+        self.create_subscription(
+            NavSatFix,
+            "/drone_control/target/gps",
+            self._on_spawned_target_gps,
             10,
         )
 
@@ -100,6 +108,10 @@ class TargetVisualizer(Node):
     def _on_drone_gps(self, msg: NavSatFix) -> None:
         if msg.status.status >= 0:  # Valid fix
             self._drone_gps = (msg.latitude, msg.longitude)
+
+    def _on_spawned_target_gps(self, msg: NavSatFix) -> None:
+        """Receive spawned target position directly from target_spawner."""
+        self._spawned_target_gps = (msg.latitude, msg.longitude)
 
     def _on_estimates(self, msg: String) -> None:
         """Parse JSON estimates which contain per-target GPS data."""
@@ -178,6 +190,14 @@ class TargetVisualizer(Node):
             d_lat, d_lon = self._drone_gps
             self._ax.scatter(d_lon, d_lat, c='black', s=200, marker='^', zorder=20, label='Drone')
             all_lats.append(d_lat)
+            all_lons.append(d_lon)
+
+        # Plot spawned target position (red X)
+        if self._spawned_target_gps is not None:
+            t_lat, t_lon = self._spawned_target_gps
+            self._ax.scatter(t_lon, t_lat, c='red', s=300, marker='X', zorder=15, label='Target', edgecolors='darkred', linewidths=2)
+            all_lats.append(t_lat)
+            all_lons.append(t_lon)
             all_lons.append(d_lon)
 
         # Axis scaling

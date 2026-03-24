@@ -1,0 +1,24 @@
+simple_takeoff_service:
+  ros__parameters:
+    default_takeoff_altitude_m: 20.0
+    guided_mode_name: "GUIDED"
+    mode_retry_s: 2.0
+    arm_retry_s: 5.0
+    max_arm_attempts: 5
+    takeoff_retry_s: 5.0
+    loop_rate_hz: 2.0
+    stream_rate_hz: 20
+    required_topics:
+      - "/mavros/local_position/pose"
+      - "/mavros/imu/data"
+
+waypoint_demo_mission:
+  ros__parameters:
+    takeoff_altitude_m: 10.0
+    waypoint_altitude_m: 20.0
+    arrival_radius_m: 1.0
+    arrival_height_tolerance_m: 2.0
+    hold_time_s: 2.0
+    setpoint_rate_hz: 20.0
+    desired_yaw_deg: 90.0
+    rtl_mode: "RTL"

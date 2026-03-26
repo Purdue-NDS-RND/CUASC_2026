@@ -13,7 +13,7 @@ setup(
             ('share/' + package_name, ['package.xml']),
             ('share/' + package_name + '/launch', ['launch/vision_demo.launch.py']),
             ('share/' + package_name + '/config', ['config/vision_params.yaml']), 
-            (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+            ('share/' + package_name + '/config', ['config/arducam_info.yaml']), 
     ],
     install_requires=["setuptools"],
     zip_safe=True,

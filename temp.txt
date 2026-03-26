@@ -1,0 +1,5 @@
+ros2 run rqt_image_view rqt_image_view
+
+ros2 run image_proc rectify_node --ros-args -r image:=/camera/image_raw -r camera_info:=/camera/camera_info -r image_rect:=/camera/image_rect_color
+
+ros2 run rqt_image_view rqt_image_view

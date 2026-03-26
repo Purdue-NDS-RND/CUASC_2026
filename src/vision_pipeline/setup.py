@@ -1,4 +1,6 @@
-from setuptools import setup
+import os
+from glob import glob
+from setuptools import find_packages, setup
 
 package_name = "vision_pipeline"
 
@@ -11,7 +13,8 @@ setup(
             ('share/' + package_name, ['package.xml']),
             ('share/' + package_name + '/launch', ['launch/vision_demo.launch.py']),
             ('share/' + package_name + '/config', ['config/vision_params.yaml']), 
-        ],
+            (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+    ],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="samuel_yoon",

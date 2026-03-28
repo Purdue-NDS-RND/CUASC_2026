@@ -32,7 +32,7 @@ class ImageGrabber(Node):
         height = self.get_parameter("image_height").value
         fps = self.get_parameter("fps").value
         shutter = self.get_parameter("shutter_speed").value
-        wb = self.get_parametgit config pull.rebase false  # mergeer("wb_mode").value
+        wb = self.get_parameter("wb_mode").value
         yaml_file = self.get_parameter("camera_info_file").value
 
         self._cv_bridge = CvBridge()

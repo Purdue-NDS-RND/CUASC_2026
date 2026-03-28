@@ -150,16 +150,16 @@ class YoloNode(Node):
             center_x = box["x1"] + (width / 2.0)
             center_y = box["y1"] + (height / 2.0)
 
-            det_msg.bbox.center.position.x = center_x
-            det_msg.bbox.center.position.y = center_y
-            det_msg.bbox.size_x = width
-            det_msg.bbox.size_y = height
+            det_msg.bbox.center.position.x = float(center_x)
+            det_msg.bbox.center.position.y = float(center_y)
+            det_msg.bbox.size_x = float(width)
+            det_msg.bbox.size_y = float(height)
 
             result = ObjectHypothesisWithPose()
             result.hypothesis.class_id = str(
-                box["cls"]
+                str(box["cls"])
             )  # Target Localizer expects a string ID
-            result.hypothesis.score = box["conf"]
+            result.hypothesis.score = float(box["conf"])
             det_msg.results.append(result)
 
             self._detection_pub.publish(det_msg)

@@ -20,5 +20,5 @@ terrain/
 mav.parm
 mav.tlog*
 *.repos
-
-
+venv/
+arducam_calib_data/

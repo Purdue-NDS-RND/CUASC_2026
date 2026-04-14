@@ -9,6 +9,7 @@ from geometry_msgs.msg import PoseStamped
 from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandTOL, SetMode
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import NavSatFix
 
@@ -24,7 +25,7 @@ class MissionExecutorNode(Node):
         super().__init__("mission_executor")
 
         self.declare_parameter("sequence_file", "")
-        self.declare_parameter("mission_modules", [])
+        self.declare_parameter("mission_modules", Parameter.Type.STRING_ARRAY)
         self.declare_parameter("loop_rate_hz", 20.0)
         self.declare_parameter("abort_rtl_mode", "RTL")
 
@@ -55,7 +56,7 @@ class MissionExecutorNode(Node):
         self._takeoff_client = self.create_client(CommandTOL, "drone_utils/takeoff")
         self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
 
-        self._context = MissionContext(self)
+        self._mission_context = MissionContext(self)
         self._sequence = self._load_sequence()
         self._active_index = 0
         self._active_mission = None
@@ -105,7 +106,7 @@ class MissionExecutorNode(Node):
         self._global_gps = msg
 
     def _control_loop(self) -> None:
-        self._context.publish_managed_setpoints()
+        self._mission_context.publish_managed_setpoints()
 
         if self._abort_requested:
             self._handle_abort_rtl()
@@ -116,7 +117,7 @@ class MissionExecutorNode(Node):
             return
 
         try:
-            status = self._active_mission.update(self._context)
+            status = self._active_mission.update(self._mission_context)
         except Exception as exc:
             self.get_logger().error(
                 f"Mission '{self._active_mission.name}' raised during update: {exc}"
@@ -140,7 +141,7 @@ class MissionExecutorNode(Node):
             policy = self._active_mission.spec.failure_policy
             self._active_mission = None
             if policy == MissionFailurePolicy.ABORT_AND_RTL:
-                self._context.clear_local_position_setpoint()
+                self._mission_context.clear_local_position_setpoint()
                 self._abort_requested = True
             return
 
@@ -157,12 +158,12 @@ class MissionExecutorNode(Node):
             f"({self._active_mission.spec.type_name})"
         )
         try:
-            self._active_mission.on_enter(self._context)
+            self._active_mission.on_enter(self._mission_context)
         except Exception as exc:
             self.get_logger().error(
                 f"Mission '{self._active_mission.name}' failed during on_enter: {exc}"
             )
-            self._context.clear_local_position_setpoint()
+            self._mission_context.clear_local_position_setpoint()
             self._active_mission = None
             self._abort_requested = True
 
@@ -191,7 +192,7 @@ class MissionExecutorNode(Node):
 
         self.get_logger().warn(f"Mission failure policy triggered abort via {rtl_mode}")
         self._abort_mode_requested = True
-        self._abort_mode_future = self._context.request_mode_change(
+        self._abort_mode_future = self._mission_context.request_mode_change(
             rtl_mode,
             self._on_abort_mode_response,
         )
@@ -210,7 +211,7 @@ class MissionExecutorNode(Node):
 
     def _safe_on_exit(self, mission) -> None:
         try:
-            mission.on_exit(self._context)
+            mission.on_exit(self._mission_context)
         except Exception as exc:
             self.get_logger().error(
                 f"Mission '{mission.name}' raised during on_exit: {exc}"

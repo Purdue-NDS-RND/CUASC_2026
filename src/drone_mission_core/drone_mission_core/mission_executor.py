@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Optional
 
 import rclpy
-from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import State
-from mavros_msgs.srv import CommandTOL, SetMode
+from geometry_msgs.msg import PointStamped, PoseStamped
+from mavros_msgs.msg import GlobalPositionTarget, PositionTarget, State
+from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
@@ -32,10 +32,24 @@ class MissionExecutorNode(Node):
         self._mavros_state: Optional[State] = None
         self._local_pose: Optional[PoseStamped] = None
         self._global_gps: Optional[NavSatFix] = None
+        self._target_detection: Optional[PointStamped] = None
+        self._image_size: Optional[tuple[int, int]] = None
+        self._managed_global_setpoint: Optional[GlobalPositionTarget] = None
+        self._managed_local_velocity_setpoint: Optional[PositionTarget] = None
 
         self._local_setpoint_pub = self.create_publisher(
             PoseStamped,
             "/mavros/setpoint_position/local",
+            10,
+        )
+        self._global_setpoint_pub = self.create_publisher(
+            GlobalPositionTarget,
+            "/mavros/setpoint_raw/global",
+            10,
+        )
+        self._local_velocity_setpoint_pub = self.create_publisher(
+            PositionTarget,
+            "/mavros/setpoint_raw/local",
             10,
         )
 
@@ -52,9 +66,26 @@ class MissionExecutorNode(Node):
             self._on_global_gps,
             qos_profile_sensor_data,
         )
+        self.create_subscription(
+            PointStamped,
+            "/drone_package_drop/target_detection",
+            self._on_target_detection,
+            10,
+        )
+        self.create_subscription(
+            PointStamped,
+            "/drone_package_drop/image_size",
+            self._on_image_size,
+            10,
+        )
 
         self._takeoff_client = self.create_client(CommandTOL, "drone_utils/takeoff")
         self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
+        self._command_client = self.create_client(CommandLong, "/mavros/cmd/command")
+        self._gimbal_client = self.create_client(
+            GimbalManagerPitchyaw,
+            "drone_utils/set_gimbal_point",
+        )
 
         self._mission_context = MissionContext(self)
         self._sequence = self._load_sequence()
@@ -105,6 +136,12 @@ class MissionExecutorNode(Node):
     def _on_global_gps(self, msg: NavSatFix) -> None:
         self._global_gps = msg
 
+    def _on_target_detection(self, msg: PointStamped) -> None:
+        self._target_detection = msg
+
+    def _on_image_size(self, msg: PointStamped) -> None:
+        self._image_size = (int(msg.point.x), int(msg.point.y))
+
     def _control_loop(self) -> None:
         self._mission_context.publish_managed_setpoints()
 
@@ -141,7 +178,7 @@ class MissionExecutorNode(Node):
             policy = self._active_mission.spec.failure_policy
             self._active_mission = None
             if policy == MissionFailurePolicy.ABORT_AND_RTL:
-                self._mission_context.clear_local_position_setpoint()
+                self._mission_context.clear_all_setpoints()
                 self._abort_requested = True
             return
 
@@ -163,7 +200,7 @@ class MissionExecutorNode(Node):
             self.get_logger().error(
                 f"Mission '{self._active_mission.name}' failed during on_enter: {exc}"
             )
-            self._mission_context.clear_local_position_setpoint()
+            self._mission_context.clear_all_setpoints()
             self._active_mission = None
             self._abort_requested = True
 

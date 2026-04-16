@@ -18,6 +18,8 @@ mission_sequence:
         fake_drop: true
         descent_rate_mps: 0.5
         final_descent_rate_mps: 0.35
+        delivery_dwell_s: 5.0
+        guided_relaunch_rate_mps: 0.6
         centering_tolerance_px: 15.0
         arrival_radius_m: 3.0
         arrival_alt_tolerance_m: 2.0
@@ -25,8 +27,7 @@ mission_sequence:
         max_recovery_altitude_m: 40.0
         max_recovery_attempts: 10
         centering_dwell_s: 1.0
-        touchdown_dwell_s: 1.0
-        landing_stall_tolerance_m: 0.05
+        touchdown_dwell_s: 0.5
         servo_channel: 9
         servo_open_pwm: 1900
         gimbal_pitch_deg: -90.0

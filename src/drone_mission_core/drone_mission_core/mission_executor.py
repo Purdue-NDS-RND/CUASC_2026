@@ -6,7 +6,7 @@ from typing import Optional
 
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped
-from mavros_msgs.msg import GlobalPositionTarget, PositionTarget, State
+from mavros_msgs.msg import ExtendedState, GlobalPositionTarget, PositionTarget, State
 from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -32,6 +32,7 @@ class MissionExecutorNode(Node):
 
         self._mavros_state: Optional[State] = None
         self._local_pose: Optional[PoseStamped] = None
+        self._extended_state: Optional[ExtendedState] = None
         self._global_gps: Optional[NavSatFix] = None
         self._target_detection: Optional[PointStamped] = None
         self._image_size: Optional[tuple[int, int]] = None
@@ -60,6 +61,12 @@ class MissionExecutorNode(Node):
             "/mavros/local_position/pose",
             self._on_local_pose,
             qos_profile_sensor_data,
+        )
+        self.create_subscription(
+            ExtendedState,
+            "/mavros/extended_state",
+            self._on_extended_state,
+            10,
         )
         self.create_subscription(
             NavSatFix,
@@ -137,6 +144,9 @@ class MissionExecutorNode(Node):
 
     def _on_local_pose(self, msg: PoseStamped) -> None:
         self._local_pose = msg
+
+    def _on_extended_state(self, msg: ExtendedState) -> None:
+        self._extended_state = msg
 
     def _on_global_gps(self, msg: NavSatFix) -> None:
         self._global_gps = msg

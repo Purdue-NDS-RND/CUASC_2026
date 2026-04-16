@@ -6,7 +6,7 @@ import math
 from typing import Any, Callable, Optional
 
 from geometry_msgs.msg import PointStamped, PoseStamped
-from mavros_msgs.msg import GlobalPositionTarget, PositionTarget, State
+from mavros_msgs.msg import ExtendedState, GlobalPositionTarget, PositionTarget, State
 from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
 from rclpy.impl.rcutils_logger import RcutilsLogger
 from rclpy.node import Node
@@ -32,6 +32,10 @@ class MissionContext:
         return self._node._local_pose
 
     @property
+    def extended_state(self) -> Optional[ExtendedState]:
+        return self._node._extended_state
+
+    @property
     def global_gps(self) -> Optional[NavSatFix]:
         return self._node._global_gps
 
@@ -52,6 +56,18 @@ class MissionContext:
 
     def seconds_since(self, start_time: Time) -> float:
         return (self.now() - start_time).nanoseconds / 1e9
+
+    def landing_state_available(self) -> bool:
+        extended_state = self.extended_state
+        if extended_state is None:
+            return False
+        return extended_state.landed_state != ExtendedState.LANDED_STATE_UNDEFINED
+
+    def vehicle_is_landed(self) -> bool:
+        extended_state = self.extended_state
+        if extended_state is None:
+            return False
+        return extended_state.landed_state == ExtendedState.LANDED_STATE_ON_GROUND
 
     def takeoff_service_ready(self) -> bool:
         return self._node._takeoff_client.service_is_ready()

@@ -105,25 +105,34 @@ It:
 
 ```text
 TRANSIT_TO_TARGET -> ACQUIRE_TARGET -> TRACK_AND_DESCEND
--> TOUCHDOWN_CONFIRM -> DELIVER_PAYLOAD -> RELAUNCH
+-> FINAL_FIXED_COLUMN_DESCENT -> GROUND_DWELL -> GUIDED_RELAUNCH
 ```
 
 It:
 - enables `target_cv` on mission entry and disables it on mission exit
 - flies to the configured GPS delivery zone and acquires the visual target
-- performs an armed touch-and-go instead of switching to `LAND`
-- confirms touchdown with a short altitude-stability dwell before delivery
+- performs an armed touch-and-go in `GUIDED` instead of switching to `LAND`
+- keeps visual XY corrections active until the vehicle is low and centered
+- freezes the current GPS lat/lon at the handoff height and descends on that fixed column
+- confirms touchdown from `/mavros/extended_state` rather than guessing from altitude stall
 - actuates the servo, or uses `fake_drop: true`, only after touchdown confirmation
+- holds on the ground for `delivery_dwell_s` before relaunching
 - relaunches to `relaunch_altitude_m` and completes airborne so the next mission can continue
 - preserves the original RTL/home point by avoiding disarm and re-arm inside the mission
+
+This mission requires the FCU to stay armed during the ground dwell. Configure
+ArduPilot `DISARM_DELAY` accordingly. A safe starting point is
+`DISARM_DELAY >= delivery_dwell_s + 5`, with `15-20 s` recommended for a
+`5-10 s` dwell.
 
 This v1 assumes the delivery target is on roughly the same ground plane as the original launch location.
 
 Delivery-specific config keys:
-- `landing_check_threshold_m` — local-altitude threshold where the mission switches into slow final-descent landing checks
-- `touchdown_dwell_s` — stable-on-target dwell before delivery
-- `landing_stall_tolerance_m` — maximum altitude variation during the touchdown dwell before the mission treats descent as stalled
+- `landing_check_threshold_m` — local-altitude threshold where the mission freezes the current GPS position and starts the fixed-column touchdown
+- `touchdown_dwell_s` — landed-state debounce before the mission accepts touchdown
+- `delivery_dwell_s` — time to remain on the ground before relaunch
 - `relaunch_altitude_m` — altitude to climb back to after delivery
+- `guided_relaunch_rate_mps` — positive climb-rate command used to lift off from the ground in `GUIDED`
 - `final_descent_rate_mps` — slower final descent rate near touchdown
 
 ## Run

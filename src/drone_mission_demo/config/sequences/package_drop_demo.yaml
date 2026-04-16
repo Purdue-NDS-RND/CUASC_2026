@@ -1,13 +1,17 @@
 mission_sequence:
   on_failure: abort_and_rtl
   missions:
+    - type: takeoff
+      name: takeoff
+      config:
+        target_altitude_m: 15.0
+
     - type: package_drop
       name: package_drop
       config:
         target_latitude: -35.3632621
         target_longitude: 149.1652375
         transit_altitude_m: 15.0
-        takeoff_altitude_m: 15.0
         drop_altitude_m: 4.0
         centering_tolerance_px: 15.0
         arrival_radius_m: 3.0

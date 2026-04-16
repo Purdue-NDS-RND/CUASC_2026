@@ -31,7 +31,6 @@ class PackageDropState(Enum):
     INIT = auto()
     WAITING_FOR_CONNECTION = auto()
     WAITING_FOR_GPS = auto()
-    TAKEOFF = auto()
     TRANSIT_TO_TARGET = auto()
     ACQUIRE_TARGET = auto()
     TARGET_NOT_FOUND = auto()
@@ -50,9 +49,6 @@ class PackageDropMission(BaseMission):
         self._target_latitude = float(config.get("target_latitude", 0.0))
         self._target_longitude = float(config.get("target_longitude", 0.0))
         self._transit_altitude_m = float(config.get("transit_altitude_m", 20.0))
-        self._takeoff_altitude_m = float(
-            config.get("takeoff_altitude_m", self._transit_altitude_m)
-        )
         self._drop_altitude_m = float(config.get("drop_altitude_m", 5.0))
         self._centering_tolerance_px = float(
             config.get("centering_tolerance_px", 30.0)
@@ -79,7 +75,6 @@ class PackageDropMission(BaseMission):
         self._target_timeout_s = float(config.get("target_timeout_s", 2.0))
 
         self._state = PackageDropState.INIT
-        self._takeoff_requested = False
         self._gimbal_requested = False
         self._servo_requested = False
         self._drop_actuated = False
@@ -107,7 +102,6 @@ class PackageDropMission(BaseMission):
             PackageDropState.INIT: self._handle_init,
             PackageDropState.WAITING_FOR_CONNECTION: self._handle_waiting_for_connection,
             PackageDropState.WAITING_FOR_GPS: self._handle_waiting_for_gps,
-            PackageDropState.TAKEOFF: self._handle_takeoff,
             PackageDropState.TRANSIT_TO_TARGET: self._handle_transit_to_target,
             PackageDropState.ACQUIRE_TARGET: self._handle_acquire_target,
             PackageDropState.TARGET_NOT_FOUND: self._handle_target_not_found,
@@ -133,27 +127,7 @@ class PackageDropMission(BaseMission):
     def _handle_waiting_for_gps(self, context: MissionContext) -> MissionStatus:
         if context.global_gps is None or context.global_gps.status.status < 0:
             return MissionStatus.WAITING
-        self._transition_to(PackageDropState.TAKEOFF, context)
-        return MissionStatus.RUNNING
-
-    def _handle_takeoff(self, context: MissionContext) -> MissionStatus:
-        if context.local_pose is not None:
-            current_altitude = context.local_pose.pose.position.z
-            if current_altitude >= self._takeoff_altitude_m * 0.9:
-                self._transition_to(PackageDropState.TRANSIT_TO_TARGET, context)
-                return MissionStatus.RUNNING
-
-        if self._takeoff_requested:
-            return MissionStatus.RUNNING
-
-        if not context.takeoff_service_ready():
-            return MissionStatus.WAITING
-
-        context.logger.info(
-            f"[{self.name}] Requesting takeoff to {self._takeoff_altitude_m:.1f} m"
-        )
-        context.request_takeoff(self._takeoff_altitude_m, self._on_takeoff_response)
-        self._takeoff_requested = True
+        self._transition_to(PackageDropState.TRANSIT_TO_TARGET, context)
         return MissionStatus.RUNNING
 
     def _handle_transit_to_target(self, context: MissionContext) -> MissionStatus:
@@ -390,14 +364,6 @@ class PackageDropMission(BaseMission):
             future.result()
         except Exception:
             self._gimbal_requested = False
-
-    def _on_takeoff_response(self, future) -> None:
-        try:
-            result = future.result()
-            if result is None or not result.success:
-                self._takeoff_requested = False
-        except Exception:
-            self._takeoff_requested = False
 
     def _on_servo_response(self, future) -> None:
         self._servo_requested = False

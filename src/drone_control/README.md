@@ -58,7 +58,7 @@ ros2 topic echo /mavros/state --once
 ## Installation
 
 ```bash
-cd ~/VTOL_ws
+cd ~/CUASC_2026
 colcon build --packages-select drone_control --symlink-install
 source install/setup.bash
 ```
@@ -374,7 +374,7 @@ ros2 launch drone_control target_demo.launch.py
 ros2 launch ardupilot_gz_bringup iris_runway.launch.py
 
 # Terminal 2: Run the waypoint demo
-source ~/VTOL_ws/install/setup.bash
+source ~/CUASC_2026/install/setup.bash
 ros2 launch drone_control waypoint_demo.launch.py
 ```
 

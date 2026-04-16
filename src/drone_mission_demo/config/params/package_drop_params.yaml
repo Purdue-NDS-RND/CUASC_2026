@@ -1,0 +1,23 @@
+simple_takeoff_service:
+  ros__parameters:
+    default_takeoff_altitude_m: 20.0
+    guided_mode_name: "GUIDED"
+    mode_retry_s: 2.0
+    arm_retry_s: 5.0
+    max_arm_attempts: 5
+    takeoff_retry_s: 5.0
+    loop_rate_hz: 2.0
+    stream_rate_hz: 20
+    required_topics:
+      - "/mavros/local_position/pose"
+      - "/mavros/imu/data"
+
+mission_executor:
+  ros__parameters:
+    loop_rate_hz: 20.0
+    abort_rtl_mode: "RTL"
+
+target_cv:
+  ros__parameters:
+    image_topic: "camera/image"
+    debug_view: false

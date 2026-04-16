@@ -1,6 +1,6 @@
 # 🚁 Setting up ROS Humble With Simulation
 
-> **Note:** Any installation instructions online that use a directory ending in `_ws` should now use `VTOL_ws` instead.
+> **Note:** Any installation instructions online that use a directory ending in `_ws` should now use `CUASC_2026` instead.
 
 ---
 
@@ -200,10 +200,10 @@ Add the following to `~/.bashrc` to avoid re-sourcing every session:
 ```bash
 # ROS 2
 source /opt/ros/humble/setup.bash
-source ~/Programming/VTOL_ws/install/setup.bash
+source ~/Programming/CUASC_2026/install/setup.bash
 alias build='colcon build && source install/setup.bash'
 
 # Gazebo
 export GZ_VERSION=harmonic
-export PATH=$PATH:/home/ppatel/Programming/VTOL_ws/Micro-XRCE-DDS-Gen/scripts
+export PATH=$PATH:/home/ppatel/Programming/CUASC_2026/Micro-XRCE-DDS-Gen/scripts
 ```

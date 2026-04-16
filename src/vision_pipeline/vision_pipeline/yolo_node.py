@@ -31,6 +31,20 @@ class YoloNode(Node):
         self.declare_parameter("overlap_ratio", 0.2)
         self.declare_parameter("publish_debug_image", True)
 
+        # 1. Get the filename from the parameter
+        model_filename = (
+            self.get_parameter("model_path").get_parameter_value().string_value
+        )
+
+        # 2. Dynamically find the path to your package's "share" directory
+        package_share_dir = get_package_share_directory("vision_pipeline")
+
+        # 3. Combine them to point to the new 'models' folder
+        full_model_path = os.path.join(package_share_dir, "models", model_filename)
+
+        self.get_logger().info(f"Loading YOLO model: {full_model_path}...")
+        self._model = YOLO(full_model_path, task="detect")
+
         self._cv_bridge = CvBridge()
 
         # Load the YOLO model (TensorRT engine)

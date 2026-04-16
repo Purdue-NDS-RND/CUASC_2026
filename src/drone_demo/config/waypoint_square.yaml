@@ -2,7 +2,7 @@
 # Each entry is [east_m, north_m].  Loaded directly by the node
 # (not through ROS params, so nested lists are supported).
 waypoints:
-  - [20.0, 0.0]
-  - [20.0, 20.0]
-  - [0.0, 20.0]
+  - [10.0, 0.0]
+  - [10.0, 10.0]
+  - [0.0, 10.0]
   - [0.0, 0.0]

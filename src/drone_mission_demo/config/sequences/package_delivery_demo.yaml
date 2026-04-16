@@ -13,7 +13,7 @@ mission_sequence:
         target_latitude: -35.3631271
         target_longitude: 149.1653479
         transit_altitude_m: 15.0
-        touchdown_altitude_m: 0.35
+        touchdown_altitude_m: 1.0
         relaunch_altitude_m: 12.0
         fake_drop: true
         descent_rate_mps: 0.5

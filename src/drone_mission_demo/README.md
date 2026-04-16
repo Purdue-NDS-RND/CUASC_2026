@@ -50,6 +50,8 @@ Defined in `drone_mission_demo/missions/`:
 - `target_cv` from `vision_pipeline`
 - `mission_executor` from `drone_mission_core`
 
+`launch/package_delivery_demo.launch.py` starts the same stack but defaults to the package-delivery sequence.
+
 ### Config Layout
 
 This package keeps mission config organized under `config/`:
@@ -151,11 +153,10 @@ Run the package-drop demo:
 ros2 launch drone_mission_demo package_drop_demo.launch.py
 ```
 
-Run the package-delivery demo on the same launch stack:
+Run the package-delivery demo:
 
 ```bash
-ros2 launch drone_mission_demo package_drop_demo.launch.py \
-  sequence:=config/sequences/package_delivery_demo.yaml
+ros2 launch drone_mission_demo package_delivery_demo.launch.py
 ```
 
 The default `package_drop_demo.yaml` is configured for simulation with `fake_drop: true` and an offset GPS target so the mission still performs transit and vision-guided tracking before simulating the release. Set `fake_drop: false` in `config/sequences/package_drop_demo.yaml` to exercise the real servo actuation path.

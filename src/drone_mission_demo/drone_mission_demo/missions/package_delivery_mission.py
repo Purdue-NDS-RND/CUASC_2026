@@ -16,7 +16,7 @@ EARTH_RADIUS_M = 6_371_000.0
 TRANSIT_YAW_DEG = 90.0
 HOLD_YAW_DEG = 90.0
 FINAL_DESCENT_BUFFER_M = 1.0
-TOUCHDOWN_ALTITUDE_STABILITY_M = 0.15
+DEFAULT_LANDING_STALL_TOLERANCE_M = 0.05
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -56,7 +56,12 @@ class PackageDeliveryMission(BaseMission):
         self._target_latitude = float(config.get("target_latitude", 0.0))
         self._target_longitude = float(config.get("target_longitude", 0.0))
         self._transit_altitude_m = float(config.get("transit_altitude_m", 20.0))
-        self._touchdown_altitude_m = float(config.get("touchdown_altitude_m", 0.35))
+        self._landing_check_threshold_m = float(
+            config.get(
+                "landing_check_threshold_m",
+                config.get("touchdown_altitude_m", 0.35),
+            )
+        )
         self._relaunch_altitude_m = float(
             config.get("relaunch_altitude_m", self._transit_altitude_m)
         )
@@ -79,6 +84,12 @@ class PackageDeliveryMission(BaseMission):
         self._max_recovery_attempts = int(config.get("max_recovery_attempts", 3))
         self._centering_dwell_s = float(config.get("centering_dwell_s", 1.0))
         self._touchdown_dwell_s = float(config.get("touchdown_dwell_s", 1.0))
+        self._landing_stall_tolerance_m = float(
+            config.get(
+                "landing_stall_tolerance_m",
+                DEFAULT_LANDING_STALL_TOLERANCE_M,
+            )
+        )
         self._servo_channel = int(config.get("servo_channel", 9))
         self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
         self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
@@ -98,6 +109,7 @@ class PackageDeliveryMission(BaseMission):
         self._relaunch_requested = False
         self._recovery_attempts = 0
         self._centering_dwell_start: Time | None = None
+        self._touchdown_confirm_start: Time | None = None
         self._target_loss_start: Time | None = None
         self._recovery_target_altitude: float | None = None
         self._recovery_hold_position: tuple[float, float] | None = None
@@ -296,7 +308,7 @@ class PackageDeliveryMission(BaseMission):
         self._target_loss_start = None
         pixel_error, velocity_east, velocity_north = tracking
         current_altitude = context.local_pose.pose.position.z
-        final_descent_start_m = self._touchdown_altitude_m + FINAL_DESCENT_BUFFER_M
+        final_descent_start_m = self._landing_check_threshold_m + FINAL_DESCENT_BUFFER_M
 
         vertical_velocity = 0.0
         if pixel_error <= self._centering_tolerance_px:
@@ -304,9 +316,9 @@ class PackageDeliveryMission(BaseMission):
             if current_altitude <= final_descent_start_m:
                 descent_rate = self._final_descent_rate_mps
             vertical_velocity = -abs(descent_rate)
-            if current_altitude <= self._touchdown_altitude_m:
+            if current_altitude <= self._landing_check_threshold_m:
                 context.logger.info(
-                    f"[{self.name}] Touchdown altitude reached, confirming landing"
+                    f"[{self.name}] Landing check threshold reached, confirming landing"
                 )
                 self._transition_to(PackageDeliveryState.TOUCHDOWN_CONFIRM, context)
                 return MissionStatus.RUNNING
@@ -336,20 +348,20 @@ class PackageDeliveryMission(BaseMission):
         context.set_local_velocity_setpoint(
             velocity_east,
             velocity_north,
-            0.0,
+            -abs(self._final_descent_rate_mps),
             yaw_deg=HOLD_YAW_DEG,
         )
 
-        if context.local_pose.pose.position.z > self._touchdown_altitude_m:
+        if context.local_pose.pose.position.z > self._landing_check_threshold_m:
             self._transition_to(PackageDeliveryState.TRACK_AND_DESCEND, context)
             return MissionStatus.RUNNING
 
-        if not self._touchdown_is_stable():
+        if not self._landing_has_stalled(context):
             return MissionStatus.RUNNING
 
         context.logger.info(
-            f"[{self.name}] Touchdown confirmed after "
-            f"{self._touchdown_dwell_s:.1f} s stable dwell"
+            f"[{self.name}] Landing confirmed after "
+            f"{self._touchdown_dwell_s:.1f} s with no descent"
         )
         self._transition_to(PackageDeliveryState.DELIVER_PAYLOAD, context)
         return MissionStatus.RUNNING
@@ -455,12 +467,15 @@ class PackageDeliveryMission(BaseMission):
         ):
             self._altitude_samples.popleft()
 
-    def _touchdown_is_stable(self) -> bool:
+    def _landing_has_stalled(self, context: MissionContext) -> bool:
+        if self._touchdown_confirm_start is None:
+            return False
+        if context.seconds_since(self._touchdown_confirm_start) < self._touchdown_dwell_s:
+            return False
         if len(self._altitude_samples) < 2:
             return False
 
-        latest_time = self._altitude_samples[-1][0]
-        window_start = latest_time - self._touchdown_dwell_s
+        window_start = self._touchdown_confirm_start.nanoseconds / 1e9
         touchdown_window = [
             (timestamp, altitude)
             for timestamp, altitude in self._altitude_samples
@@ -474,7 +489,7 @@ class PackageDeliveryMission(BaseMission):
             return False
 
         altitudes = [altitude for _, altitude in touchdown_window]
-        return max(altitudes) - min(altitudes) <= TOUCHDOWN_ALTITUDE_STABILITY_M
+        return max(altitudes) - min(altitudes) <= self._landing_stall_tolerance_m
 
     def _get_tracking_solution(
         self,
@@ -599,6 +614,11 @@ class PackageDeliveryMission(BaseMission):
             return
 
         self._centering_dwell_start = None
+        if new_state == PackageDeliveryState.TOUCHDOWN_CONFIRM:
+            self._touchdown_confirm_start = context.now() if context is not None else None
+            self._altitude_samples.clear()
+        elif new_state != PackageDeliveryState.TOUCHDOWN_CONFIRM:
+            self._touchdown_confirm_start = None
         self._target_loss_start = None
         if new_state != PackageDeliveryState.TARGET_NOT_FOUND:
             self._recovery_target_altitude = None

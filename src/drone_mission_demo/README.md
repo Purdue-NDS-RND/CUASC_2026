@@ -120,8 +120,9 @@ It:
 This v1 assumes the delivery target is on roughly the same ground plane as the original launch location.
 
 Delivery-specific config keys:
-- `touchdown_altitude_m` — local-altitude threshold used to begin touchdown confirmation
+- `landing_check_threshold_m` — local-altitude threshold where the mission switches into slow final-descent landing checks
 - `touchdown_dwell_s` — stable-on-target dwell before delivery
+- `landing_stall_tolerance_m` — maximum altitude variation during the touchdown dwell before the mission treats descent as stalled
 - `relaunch_altitude_m` — altitude to climb back to after delivery
 - `final_descent_rate_mps` — slower final descent rate near touchdown
 

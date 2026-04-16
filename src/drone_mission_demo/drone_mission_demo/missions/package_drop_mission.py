@@ -89,9 +89,13 @@ class PackageDropMission(BaseMission):
         self._target_loss_start: Time | None = None
         self._recovery_target_altitude: float | None = None
         self._recovery_hold_position: tuple[float, float] | None = None
+        self._target_cv_enabled = False
+        self._target_cv_enable_requested = False
         self._failed = self._target_latitude == 0.0 and self._target_longitude == 0.0
 
         context.clear_all_setpoints()
+        context.clear_target_tracking_state()
+        self._request_target_cv_enable(context)
         if self._failed:
             context.logger.error(
                 f"[{self.name}] target_latitude and target_longitude must be set"
@@ -99,6 +103,9 @@ class PackageDropMission(BaseMission):
 
     def on_exit(self, context: MissionContext) -> None:
         context.clear_all_setpoints()
+        context.clear_target_tracking_state()
+        if context.target_cv_control_ready():
+            context.set_target_cv_enabled(False)
 
     def update(self, context: MissionContext) -> MissionStatus:
         if self._failed:
@@ -120,6 +127,9 @@ class PackageDropMission(BaseMission):
         return handler(context)
 
     def _handle_init(self, context: MissionContext) -> MissionStatus:
+        if not self._target_cv_enabled:
+            self._request_target_cv_enable(context)
+            return MissionStatus.WAITING
         self._transition_to(PackageDropState.WAITING_FOR_CONNECTION, context)
         return MissionStatus.RUNNING
 
@@ -417,6 +427,24 @@ class PackageDropMission(BaseMission):
                 self._drop_actuated = True
         except Exception:
             self._drop_actuated = False
+
+    def _request_target_cv_enable(self, context: MissionContext) -> None:
+        if self._target_cv_enabled or self._target_cv_enable_requested:
+            return
+        if not context.target_cv_control_ready():
+            return
+
+        context.logger.info(f"[{self.name}] Enabling target detection")
+        context.set_target_cv_enabled(True, self._on_target_cv_enable_response)
+        self._target_cv_enable_requested = True
+
+    def _on_target_cv_enable_response(self, future) -> None:
+        self._target_cv_enable_requested = False
+        try:
+            result = future.result()
+            self._target_cv_enabled = bool(result is not None and result.success)
+        except Exception:
+            self._target_cv_enabled = False
 
     def _transition_to(
         self,

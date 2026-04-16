@@ -12,6 +12,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import NavSatFix
+from std_srvs.srv import SetBool
 
 from .mission_api import MissionFailurePolicy, MissionStatus
 from .mission_context import MissionContext
@@ -85,6 +86,10 @@ class MissionExecutorNode(Node):
         self._gimbal_client = self.create_client(
             GimbalManagerPitchyaw,
             "drone_utils/set_gimbal_point",
+        )
+        self._target_cv_control_client = self.create_client(
+            SetBool,
+            "/drone_package_drop/set_target_cv_enabled",
         )
 
         self._mission_context = MissionContext(self)

@@ -13,6 +13,7 @@ from rclpy.node import Node
 from rclpy.task import Future
 from rclpy.time import Time
 from sensor_msgs.msg import NavSatFix
+from std_srvs.srv import SetBool
 
 
 class MissionContext:
@@ -63,6 +64,9 @@ class MissionContext:
 
     def gimbal_service_ready(self) -> bool:
         return self._node._gimbal_client.service_is_ready()
+
+    def target_cv_control_ready(self) -> bool:
+        return self._node._target_cv_control_client.service_is_ready()
 
     def request_takeoff(
         self,
@@ -120,6 +124,22 @@ class MissionContext:
         if done_callback is not None:
             future.add_done_callback(done_callback)
         return future
+
+    def set_target_cv_enabled(
+        self,
+        enabled: bool,
+        done_callback: Callable[[Future[Any]], None] | None = None,
+    ) -> Future[Any]:
+        request = SetBool.Request()
+        request.data = bool(enabled)
+        future = self._node._target_cv_control_client.call_async(request)
+        if done_callback is not None:
+            future.add_done_callback(done_callback)
+        return future
+
+    def clear_target_tracking_state(self) -> None:
+        self._node._target_detection = None
+        self._node._image_size = None
 
     def set_local_position_setpoint(
         self,

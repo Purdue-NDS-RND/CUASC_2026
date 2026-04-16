@@ -35,7 +35,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     target_cv_node = Node(
-        package="drone_package_drop",
+        package="vision_pipeline",
         executable="target_cv",
         name="target_cv",
         output="screen",

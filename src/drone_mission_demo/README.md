@@ -39,7 +39,7 @@ Defined in `drone_mission_demo/missions/`:
 `launch/package_drop_demo.launch.py` starts:
 - `simple_takeoff_service` from `drone_utils`
 - `gimbal_point_service` from `drone_utils`
-- `target_cv` from `drone_package_drop`
+- `target_cv` from `vision_pipeline`
 - `mission_executor` from `drone_mission_core`
 
 ### Config Layout
@@ -81,6 +81,7 @@ TRANSIT_TO_TARGET -> ACQUIRE_TARGET -> TRACK_AND_DESCEND -> DROP_PAYLOAD
 
 It:
 - flies to the configured GPS drop zone
+- enables `target_cv` on mission entry and disables it on mission exit
 - waits for a stable visual lock from `target_cv`
 - commands XY correction and vertical descent simultaneously through shared local velocity setpoints
 - bounds target-loss recovery with `max_recovery_altitude_m` and `max_recovery_attempts`

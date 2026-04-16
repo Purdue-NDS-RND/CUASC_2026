@@ -174,12 +174,10 @@ class MissionExecutorNode(Node):
             self.get_logger().error(
                 f"Mission '{self._active_mission.name}' ended with status {status.name}"
             )
-            self._safe_on_exit(self._active_mission)
-            policy = self._active_mission.spec.failure_policy
-            self._active_mission = None
-            if policy == MissionFailurePolicy.ABORT_AND_RTL:
-                self._mission_context.clear_all_setpoints()
-                self._abort_requested = True
+            self._handle_failure_policy(
+                self._active_mission,
+                self._active_mission.spec.failure_policy,
+            )
             return
 
     def _start_next_mission(self) -> None:
@@ -200,9 +198,10 @@ class MissionExecutorNode(Node):
             self.get_logger().error(
                 f"Mission '{self._active_mission.name}' failed during on_enter: {exc}"
             )
-            self._mission_context.clear_all_setpoints()
-            self._active_mission = None
-            self._abort_requested = True
+            self._handle_failure_policy(
+                self._active_mission,
+                self._active_mission.spec.failure_policy,
+            )
 
     def _handle_abort_rtl(self) -> None:
         rtl_mode = (
@@ -253,6 +252,20 @@ class MissionExecutorNode(Node):
             self.get_logger().error(
                 f"Mission '{mission.name}' raised during on_exit: {exc}"
             )
+
+    def _handle_failure_policy(self, mission, policy: MissionFailurePolicy) -> None:
+        self._safe_on_exit(mission)
+        self._mission_context.clear_all_setpoints()
+        self._active_mission = None
+
+        if policy == MissionFailurePolicy.CONTINUE_TO_NEXT:
+            self.get_logger().warn(
+                f"Mission '{mission.name}' failed; continuing to next mission"
+            )
+            self._active_index += 1
+            return
+
+        self._abort_requested = True
 
 
 def main() -> None:

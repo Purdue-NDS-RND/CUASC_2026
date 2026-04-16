@@ -10,6 +10,13 @@ This package proves the new multi-mission framework with a single-flight sequenc
 
 Square and zig-zag are not separate mission implementations. They are two configurations of the same reusable `LocalWaypointMission`.
 
+The package also includes a package-drop demo sequence:
+1. takeoff
+2. transit to the drop zone
+3. visually track the target while descending
+4. release the payload
+5. RTL
+
 ## What It Contains
 
 ### Mission Implementations
@@ -20,12 +27,19 @@ Defined in `drone_mission_demo/missions/`:
 |---|---|---|
 | `takeoff` | `TakeoffMission` | Request takeoff and wait for altitude gate |
 | `local_waypoint` | `LocalWaypointMission` | Fly a local ENU waypoint pattern with hold time at each point |
+| `package_drop` | `PackageDropMission` | Fly to a GPS target, visually track while descending, and release payload |
 | `rtl` | `RTLMission` | Request RTL mode and wait for FCU mode confirmation |
 
 ### Launch File
 
 `launch/multi_mission_demo.launch.py` starts:
 - `simple_takeoff_service` from `drone_utils`
+- `mission_executor` from `drone_mission_core`
+
+`launch/package_drop_demo.launch.py` starts:
+- `simple_takeoff_service` from `drone_utils`
+- `gimbal_point_service` from `drone_utils`
+- `target_cv` from `drone_package_drop`
 - `mission_executor` from `drone_mission_core`
 
 ### Config Layout
@@ -35,8 +49,10 @@ This package keeps mission config organized under `config/`:
 | Path | Purpose |
 |---|---|
 | `config/params/mission_params.yaml` | ROS parameters for the takeoff service and mission executor |
+| `config/params/package_drop_params.yaml` | ROS parameters for the package-drop launch stack |
 | `config/patterns/square.yaml` | Reusable square waypoint pattern |
 | `config/patterns/zig_zag.yaml` | Reusable zig-zag waypoint pattern |
+| `config/sequences/package_drop_demo.yaml` | Package-drop mission sequence |
 | `config/sequences/square_then_zig_zag.yaml` | Default multi-mission sequence |
 | `config/sequences/square_only.yaml` | Single-mission compatibility example |
 
@@ -54,6 +70,22 @@ It:
 - checks horizontal and vertical arrival tolerances
 - holds for `hold_time_s` at each waypoint
 - completes when the full pattern is exhausted
+
+## `PackageDropMission` Behavior
+
+`PackageDropMission` owns a vision-guided drop flow:
+
+```text
+TRANSIT_TO_TARGET -> ACQUIRE_TARGET -> TRACK_AND_DESCEND -> DROP_PAYLOAD
+```
+
+It:
+- flies to the configured GPS drop zone
+- waits for a stable visual lock from `target_cv`
+- commands XY correction and vertical descent simultaneously through shared local velocity setpoints
+- bounds target-loss recovery with `max_recovery_altitude_m` and `max_recovery_attempts`
+- supports `fake_drop: true` for simulation-only testing, which skips vision/drop actuation and just holds over the target briefly before succeeding
+- can use `failure_policy: continue_to_next` so a failed drop falls through to the next mission in the sequence
 
 ## Run
 
@@ -76,6 +108,14 @@ Choose a different params file:
 ros2 launch drone_mission_demo multi_mission_demo.launch.py \
   params:=config/params/mission_params.yaml
 ```
+
+Run the package-drop demo:
+
+```bash
+ros2 launch drone_mission_demo package_drop_demo.launch.py
+```
+
+The default `package_drop_demo.yaml` is configured for simulation with `fake_drop: true`. Set `fake_drop: false` to exercise the full vision-guided drop flow.
 
 ## Sequence Example
 
@@ -102,6 +142,6 @@ mission_sequence:
 This package is the example layer, not the long-term home for every mission.
 
 Near-term expected next step:
-- add a future `PackageDropMission` using the same executor/context model
+- continue porting additional mission behaviors into reusable mission classes built on the same executor/context model
 
-That future mission can keep its own internal state machine while reusing the shared framework rather than running as a separate ROS node.
+New missions should keep their own internal state machines while reusing the shared framework rather than running as separate ROS nodes.

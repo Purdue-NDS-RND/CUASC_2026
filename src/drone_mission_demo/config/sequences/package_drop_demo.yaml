@@ -8,15 +8,21 @@ mission_sequence:
 
     - type: package_drop
       name: package_drop
+      failure_policy: continue_to_next
       config:
         target_latitude: -35.3632621
         target_longitude: 149.1652375
         transit_altitude_m: 15.0
         drop_altitude_m: 4.0
+        fake_drop: true
+        fake_drop_dwell_s: 2.0
+        descent_rate_mps: 0.5
         centering_tolerance_px: 15.0
         arrival_radius_m: 3.0
         arrival_alt_tolerance_m: 2.0
         not_found_ascent_m: 3.0
+        max_recovery_altitude_m: 25.0
+        max_recovery_attempts: 3
         centering_dwell_s: 1.0
         drop_hover_dwell_s: 8.0
         servo_channel: 9

@@ -25,7 +25,7 @@ class RTLMission(BaseMission):
         self._rtl_mode = str(self.spec.config.get("rtl_mode", "RTL"))
         self._request_sent = False
         self._state = RTLState.INIT
-        context.clear_local_position_setpoint()
+        context.clear_all_setpoints()
 
     def update(self, context: MissionContext) -> MissionStatus:
         handler = {

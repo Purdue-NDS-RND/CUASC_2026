@@ -14,7 +14,7 @@ Main executor node that:
 - instantiates missions one at a time
 - owns shared MAVROS subscriptions, publishers, and service clients
 - advances the active mission on a timer
-- applies default failure handling (`ABORT_AND_RTL`)
+- applies configurable mission failure handling (`ABORT_AND_RTL` or `CONTINUE_TO_NEXT`)
 
 The executor is intentionally non-blocking and follows the same ROS2 style already used elsewhere in the repo: subscriptions + async service calls + `create_timer()`.
 
@@ -39,16 +39,15 @@ Defined in `drone_mission_core/mission_context.py`.
 - MAVROS state access
 - local pose access
 - global GPS access
+- target detection and image size access for vision-guided missions
 - clock/logger access
 - takeoff requests through `drone_utils/takeoff`
 - local position setpoint management
+- global GPS setpoint management
+- local velocity setpoint management
+- gimbal point requests
+- servo / actuator requests through MAVROS `CommandLong`
 - mode changes such as `RTL`
-
-It also reserves explicit extension points for future missions that need:
-- global GPS setpoints
-- local velocity setpoints
-- gimbal control
-- servo / actuator control
 
 ### Mission Registry
 
@@ -68,13 +67,17 @@ Responsibilities:
 |---|---|---|
 | `/mavros/state` | `mavros_msgs/State` | FCU connection and mode |
 | `/mavros/local_position/pose` | `geometry_msgs/PoseStamped` | Local ENU position feedback |
-| `/mavros/global_position/global` | `sensor_msgs/NavSatFix` | GPS telemetry for future missions |
+| `/mavros/global_position/global` | `sensor_msgs/NavSatFix` | GPS telemetry |
+| `/drone_package_drop/target_detection` | `geometry_msgs/PointStamped` | Vision target center pixel for package-drop missions |
+| `/drone_package_drop/image_size` | `geometry_msgs/PointStamped` | Camera image dimensions for vision-guided missions |
 
 ### Published
 
 | Topic | Type | Purpose |
 |---|---|---|
 | `/mavros/setpoint_position/local` | `geometry_msgs/PoseStamped` | Managed local position setpoint keepalive |
+| `/mavros/setpoint_raw/global` | `mavros_msgs/GlobalPositionTarget` | Managed global GPS setpoint keepalive |
+| `/mavros/setpoint_raw/local` | `mavros_msgs/PositionTarget` | Managed local velocity setpoint keepalive |
 
 ### Service Clients
 
@@ -82,6 +85,8 @@ Responsibilities:
 |---|---|---|
 | `drone_utils/takeoff` | `mavros_msgs/CommandTOL` | Shared takeoff sequence |
 | `/mavros/set_mode` | `mavros_msgs/SetMode` | Mode changes such as `RTL` |
+| `/mavros/cmd/command` | `mavros_msgs/CommandLong` | Shared servo / actuator commands |
+| `drone_utils/set_gimbal_point` | `mavros_msgs/GimbalManagerPitchyaw` | Shared gimbal pointing requests |
 
 ## Sequence YAML Shape
 
@@ -107,6 +112,10 @@ mission_sequence:
       config:
         rtl_mode: "RTL"
 ```
+
+Supported failure policies:
+- `abort_and_rtl`
+- `continue_to_next`
 
 ## Running
 

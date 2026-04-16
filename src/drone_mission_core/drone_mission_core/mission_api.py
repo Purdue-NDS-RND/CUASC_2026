@@ -26,6 +26,7 @@ class MissionFailurePolicy(Enum):
     """How the executor should react when a mission fails."""
 
     ABORT_AND_RTL = "abort_and_rtl"
+    CONTINUE_TO_NEXT = "continue_to_next"
 
     @classmethod
     def from_value(cls, value: str | None) -> "MissionFailurePolicy":

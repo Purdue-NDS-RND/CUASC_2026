@@ -84,7 +84,7 @@ It:
 - waits for a stable visual lock from `target_cv`
 - commands XY correction and vertical descent simultaneously through shared local velocity setpoints
 - bounds target-loss recovery with `max_recovery_altitude_m` and `max_recovery_attempts`
-- supports `fake_drop: true` for simulation-only testing, which skips vision/drop actuation and just holds over the target briefly before succeeding
+- supports `fake_drop: true` for simulation-only testing, which still uses GPS transit and vision tracking but skips the real servo actuation step after the normal drop hover
 - can use `failure_policy: continue_to_next` so a failed drop falls through to the next mission in the sequence
 
 ## Run
@@ -115,7 +115,7 @@ Run the package-drop demo:
 ros2 launch drone_mission_demo package_drop_demo.launch.py
 ```
 
-The default `package_drop_demo.yaml` is configured for simulation with `fake_drop: true`. Set `fake_drop: false` to exercise the full vision-guided drop flow.
+The default `package_drop_demo.yaml` is configured for simulation with `fake_drop: true` and an offset GPS target so the mission still performs transit and vision-guided tracking before simulating the release. Set `fake_drop: false` in `config/sequences/package_drop_demo.yaml` to exercise the real servo actuation path.
 
 ## Sequence Example
 

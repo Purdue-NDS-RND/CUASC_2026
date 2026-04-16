@@ -12,6 +12,8 @@ from rclpy.time import Time
 
 
 EARTH_RADIUS_M = 6_371_000.0
+TRANSIT_YAW_DEG = 90.0
+HOLD_YAW_DEG = 90.0
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -36,7 +38,6 @@ class PackageDropState(Enum):
     TARGET_NOT_FOUND = auto()
     TRACK_AND_DESCEND = auto()
     DROP_PAYLOAD = auto()
-    SIMULATED_DROP = auto()
     COMPLETE = auto()
 
 
@@ -52,7 +53,6 @@ class PackageDropMission(BaseMission):
         self._drop_altitude_m = float(config.get("drop_altitude_m", 5.0))
         self._descent_rate_mps = float(config.get("descent_rate_mps", 0.5))
         self._fake_drop = bool(config.get("fake_drop", False))
-        self._fake_drop_dwell_s = float(config.get("fake_drop_dwell_s", 2.0))
         self._centering_tolerance_px = float(
             config.get("centering_tolerance_px", 30.0)
         )
@@ -71,8 +71,6 @@ class PackageDropMission(BaseMission):
         self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
         self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
         self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
-        self._transit_yaw_deg = float(config.get("transit_yaw_deg", 90.0))
-        self._hold_yaw_deg = float(config.get("hold_yaw_deg", 90.0))
         self._centering_gain_mps_per_px = float(
             config.get("centering_gain_mps_per_px", 0.02)
         )
@@ -117,7 +115,6 @@ class PackageDropMission(BaseMission):
             PackageDropState.TARGET_NOT_FOUND: self._handle_target_not_found,
             PackageDropState.TRACK_AND_DESCEND: self._handle_track_and_descend,
             PackageDropState.DROP_PAYLOAD: self._handle_drop_payload,
-            PackageDropState.SIMULATED_DROP: self._handle_simulated_drop,
             PackageDropState.COMPLETE: self._handle_complete,
         }.get(self._state, self._handle_invalid_state)
         return handler(context)
@@ -143,7 +140,7 @@ class PackageDropMission(BaseMission):
             self._target_latitude,
             self._target_longitude,
             self._transit_altitude_m,
-            yaw_deg=self._transit_yaw_deg,
+            yaw_deg=TRANSIT_YAW_DEG,
             lock_yaw=False,
         )
 
@@ -164,9 +161,6 @@ class PackageDropMission(BaseMission):
             and altitude_error <= self._arrival_alt_tolerance_m
         ):
             context.logger.info(f"[{self.name}] Arrived at GPS drop zone")
-            if self._fake_drop:
-                self._transition_to(PackageDropState.SIMULATED_DROP, context)
-                return MissionStatus.RUNNING
             self._transition_to(PackageDropState.ACQUIRE_TARGET, context)
         return MissionStatus.RUNNING
 
@@ -233,7 +227,7 @@ class PackageDropMission(BaseMission):
             self._recovery_hold_position[0],
             self._recovery_hold_position[1],
             self._recovery_target_altitude,
-            yaw_deg=self._hold_yaw_deg,
+            yaw_deg=HOLD_YAW_DEG,
             lock_yaw=True,
         )
         altitude_error = abs(
@@ -252,7 +246,7 @@ class PackageDropMission(BaseMission):
                 0.0,
                 0.0,
                 0.0,
-                yaw_deg=self._hold_yaw_deg,
+                yaw_deg=HOLD_YAW_DEG,
             )
             if self._target_loss_start is None:
                 self._target_loss_start = context.now()
@@ -306,7 +300,7 @@ class PackageDropMission(BaseMission):
             velocity_east,
             velocity_north,
             vertical_velocity,
-            yaw_deg=self._hold_yaw_deg,
+            yaw_deg=HOLD_YAW_DEG,
         )
         return MissionStatus.RUNNING
 
@@ -318,7 +312,7 @@ class PackageDropMission(BaseMission):
                 0.0,
                 0.0,
                 0.0,
-                yaw_deg=self._hold_yaw_deg,
+                yaw_deg=HOLD_YAW_DEG,
             )
 
         if self._drop_actuated:
@@ -336,6 +330,13 @@ class PackageDropMission(BaseMission):
         if context.seconds_since(self._drop_hover_start) < self._drop_hover_dwell_s:
             return MissionStatus.RUNNING
 
+        if self._fake_drop:
+            context.logger.info(
+                f"[{self.name}] Fake drop complete"
+            )
+            self._transition_to(PackageDropState.COMPLETE, context)
+            return MissionStatus.SUCCESS
+
         if self._servo_requested:
             return MissionStatus.RUNNING
 
@@ -350,25 +351,6 @@ class PackageDropMission(BaseMission):
         )
         self._servo_requested = True
         return MissionStatus.RUNNING
-
-    def _handle_simulated_drop(self, context: MissionContext) -> MissionStatus:
-        if context.global_gps is not None and context.local_pose is not None:
-            self._hold_current_position(context)
-
-        if self._drop_hover_start is None:
-            self._drop_hover_start = context.now()
-            context.logger.info(
-                f"[{self.name}] Fake drop enabled, simulating release for "
-                f"{self._fake_drop_dwell_s:.1f} s"
-            )
-            return MissionStatus.RUNNING
-
-        if context.seconds_since(self._drop_hover_start) < self._fake_drop_dwell_s:
-            return MissionStatus.RUNNING
-
-        context.logger.info(f"[{self.name}] Fake drop complete")
-        self._transition_to(PackageDropState.COMPLETE, context)
-        return MissionStatus.SUCCESS
 
     def _handle_complete(self, _context: MissionContext) -> MissionStatus:
         return MissionStatus.SUCCESS
@@ -401,7 +383,7 @@ class PackageDropMission(BaseMission):
             context.global_gps.latitude,
             context.global_gps.longitude,
             hold_altitude,
-            yaw_deg=self._hold_yaw_deg,
+            yaw_deg=HOLD_YAW_DEG,
             lock_yaw=True,
         )
 

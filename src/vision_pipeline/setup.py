@@ -16,6 +16,7 @@ setup(
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
         (os.path.join("share", package_name, "urdf"), glob("urdf/*.urdf")),
+        (os.path.join("share", package_name, "models"), glob("models/*.engine")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -27,8 +28,6 @@ setup(
         "console_scripts": [
             "image_grabber = vision_pipeline.image_grabber:main",
             "yolo_node = vision_pipeline.yolo_node:main",
-            # The new unified localizer replaces the old raycaster/geolocator
-            "target_localizer = vision_pipeline.target_localizer:main",
+            "mission_logger = vision_pipeline.mission_logger:main", # <-- New!
         ],
     },
-)

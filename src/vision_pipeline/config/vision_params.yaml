@@ -9,7 +9,7 @@ image_grabber:
 
 yolo_node:
   ros__parameters:
-    model_path: "yolo26n_v1.0.engine"
+    model_path: "/models/yolo26n_v1.0.engine"
     conf_threshold: 0.50
     iou_threshold: 0.50
     slice_size: 1280

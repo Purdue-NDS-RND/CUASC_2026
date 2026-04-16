@@ -2,8 +2,11 @@
 Simple Monocular Raycaster (Level-Flight Assumption)
 """
 
+import os
+
 import image_geometry
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import (
     Point,
     PointStamped,  # Better for world coordinates as it holds a timestamp

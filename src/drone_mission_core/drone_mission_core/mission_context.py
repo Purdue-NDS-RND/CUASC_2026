@@ -6,7 +6,13 @@ import math
 from typing import Any, Callable, Optional
 
 from geometry_msgs.msg import PointStamped, PoseStamped
-from mavros_msgs.msg import ExtendedState, GlobalPositionTarget, PositionTarget, State
+from mavros_msgs.msg import (
+    AttitudeTarget,
+    ExtendedState,
+    GlobalPositionTarget,
+    PositionTarget,
+    State,
+)
 from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
 from rclpy.impl.rcutils_logger import RcutilsLogger
 from rclpy.node import Node
@@ -177,6 +183,7 @@ class MissionContext:
         msg.pose.orientation.z = math.sin(yaw_rad / 2.0)
         self._node._managed_global_setpoint = None
         self._node._managed_local_velocity_setpoint = None
+        self._node._managed_attitude_setpoint = None
         self._managed_local_setpoint = msg
 
     def clear_local_position_setpoint(self) -> None:
@@ -210,6 +217,7 @@ class MissionContext:
             msg.type_mask |= GlobalPositionTarget.IGNORE_YAW
         self._managed_local_setpoint = None
         self._node._managed_local_velocity_setpoint = None
+        self._node._managed_attitude_setpoint = None
         self._node._managed_global_setpoint = msg
 
     def clear_global_position_setpoint(self) -> None:
@@ -240,18 +248,61 @@ class MissionContext:
         msg.yaw = math.radians(yaw_deg)
         self._managed_local_setpoint = None
         self._node._managed_global_setpoint = None
+        self._node._managed_attitude_setpoint = None
         self._node._managed_local_velocity_setpoint = msg
 
     def clear_local_velocity_setpoint(self) -> None:
         self._node._managed_local_velocity_setpoint = None
 
+    def set_attitude_climb_rate_setpoint(
+        self,
+        climb_rate_mps: float,
+        yaw_deg: float = 90.0,
+        max_climb_rate_mps: float = 2.5,
+    ) -> None:
+        msg = AttitudeTarget()
+        msg.header.frame_id = "map"
+        msg.type_mask = (
+            AttitudeTarget.IGNORE_ROLL_RATE
+            | AttitudeTarget.IGNORE_PITCH_RATE
+            | AttitudeTarget.IGNORE_YAW_RATE
+        )
+
+        yaw_rad = math.radians(yaw_deg)
+        msg.orientation.w = math.cos(yaw_rad / 2.0)
+        msg.orientation.x = 0.0
+        msg.orientation.y = 0.0
+        msg.orientation.z = math.sin(yaw_rad / 2.0)
+
+        capped_max_climb = max(float(max_climb_rate_mps), 0.01)
+        normalized_climb = max(
+            -1.0,
+            min(float(climb_rate_mps) / capped_max_climb, 1.0),
+        )
+        msg.thrust = 0.5 + 0.5 * normalized_climb
+
+        self._managed_local_setpoint = None
+        self._node._managed_global_setpoint = None
+        self._node._managed_local_velocity_setpoint = None
+        self._node._managed_attitude_setpoint = msg
+
+    def clear_attitude_setpoint(self) -> None:
+        self._node._managed_attitude_setpoint = None
+
     def clear_all_setpoints(self) -> None:
         self.clear_local_position_setpoint()
         self.clear_global_position_setpoint()
         self.clear_local_velocity_setpoint()
+        self.clear_attitude_setpoint()
 
     def publish_managed_setpoints(self) -> None:
         if self._managed_local_setpoint is None:
+            attitude_setpoint = self._node._managed_attitude_setpoint
+            if attitude_setpoint is not None:
+                attitude_setpoint.header.stamp = self.now().to_msg()
+                self._node._attitude_setpoint_pub.publish(attitude_setpoint)
+                return
+
             local_velocity_setpoint = self._node._managed_local_velocity_setpoint
             if local_velocity_setpoint is not None:
                 local_velocity_setpoint.header.stamp = self.now().to_msg()

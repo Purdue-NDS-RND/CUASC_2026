@@ -6,7 +6,13 @@ from typing import Optional
 
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped
-from mavros_msgs.msg import ExtendedState, GlobalPositionTarget, PositionTarget, State
+from mavros_msgs.msg import (
+    AttitudeTarget,
+    ExtendedState,
+    GlobalPositionTarget,
+    PositionTarget,
+    State,
+)
 from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -38,6 +44,7 @@ class MissionExecutorNode(Node):
         self._image_size: Optional[tuple[int, int]] = None
         self._managed_global_setpoint: Optional[GlobalPositionTarget] = None
         self._managed_local_velocity_setpoint: Optional[PositionTarget] = None
+        self._managed_attitude_setpoint: Optional[AttitudeTarget] = None
 
         self._local_setpoint_pub = self.create_publisher(
             PoseStamped,
@@ -52,6 +59,11 @@ class MissionExecutorNode(Node):
         self._local_velocity_setpoint_pub = self.create_publisher(
             PositionTarget,
             "/mavros/setpoint_raw/local",
+            10,
+        )
+        self._attitude_setpoint_pub = self.create_publisher(
+            AttitudeTarget,
+            "/mavros/setpoint_raw/attitude",
             10,
         )
 

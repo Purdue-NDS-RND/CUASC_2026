@@ -20,6 +20,7 @@ mission_sequence:
         final_descent_rate_mps: 0.35
         delivery_dwell_s: 5.0
         guided_relaunch_rate_mps: 0.6
+        guided_relaunch_max_climb_rate_mps: 2.5
         centering_tolerance_px: 15.0
         arrival_radius_m: 3.0
         arrival_alt_tolerance_m: 2.0

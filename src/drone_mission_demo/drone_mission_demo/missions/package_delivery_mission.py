@@ -70,6 +70,9 @@ class PackageDeliveryMission(BaseMission):
         self._guided_relaunch_rate_mps = float(
             config.get("guided_relaunch_rate_mps", 0.6)
         )
+        self._guided_relaunch_max_climb_rate_mps = float(
+            config.get("guided_relaunch_max_climb_rate_mps", 2.5)
+        )
         self._fake_drop = bool(config.get("fake_drop", False))
         self._centering_tolerance_px = float(
             config.get("centering_tolerance_px", 30.0)
@@ -488,20 +491,14 @@ class PackageDeliveryMission(BaseMission):
 
         current_alt = context.local_pose.pose.position.z
         if current_alt >= self._relaunch_altitude_m * 0.9:
-            context.set_local_velocity_setpoint(
-                0.0,
-                0.0,
-                0.0,
-                yaw_deg=HOLD_YAW_DEG,
-            )
+            context.clear_all_setpoints()
             self._transition_to(PackageDeliveryState.COMPLETE, context)
             return MissionStatus.SUCCESS
 
-        context.set_local_velocity_setpoint(
-            0.0,
-            0.0,
+        context.set_attitude_climb_rate_setpoint(
             abs(self._guided_relaunch_rate_mps),
             yaw_deg=HOLD_YAW_DEG,
+            max_climb_rate_mps=self._guided_relaunch_max_climb_rate_mps,
         )
         return MissionStatus.RUNNING
 

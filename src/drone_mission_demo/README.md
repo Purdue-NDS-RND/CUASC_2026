@@ -132,7 +132,8 @@ Delivery-specific config keys:
 - `touchdown_dwell_s` — landed-state debounce before the mission accepts touchdown
 - `delivery_dwell_s` — time to remain on the ground before relaunch
 - `relaunch_altitude_m` — altitude to climb back to after delivery
-- `guided_relaunch_rate_mps` — positive climb-rate command used to lift off from the ground in `GUIDED`
+- `guided_relaunch_rate_mps` — positive climb-rate request used to lift off from the ground in `GUIDED`
+- `guided_relaunch_max_climb_rate_mps` — max climb rate used to map the relaunch request onto ArduPilot's `SET_ATTITUDE_TARGET` thrust field
 - `final_descent_rate_mps` — slower final descent rate near touchdown
 
 ## Run

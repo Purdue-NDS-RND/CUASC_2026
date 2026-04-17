@@ -1,14 +1,14 @@
 flight_settings:
-  # The ground altitude of the field on the day of the flight (in meters above sea level)
-  ground_altitude_m: 0.0
+    # The ground altitude of the field on the day of the flight (in meters above sea level)
+    ground_altitude_m: 0.0
 
 camera_mount:
-  # Translation in meters (Offset from the Pixhawk)
-  offset_x_m: -0.127
-  offset_y_m: 0.0
-  offset_z_m: -0.1524
+    # Translation in meters (Offset from the Pixhawk)
+    offset_x_m: -0.127
+    offset_y_m: 0.0
+    offset_z_m: -0.1524
 
-  # Rotation in degrees
-  pitch_deg: -90.0
-  roll_deg: 0.0
-  yaw_deg: 0.0
+    # Rotation in degrees
+    pitch_deg: 0.0
+    roll_deg: 0.0
+    yaw_deg: 0.0

@@ -1,34 +1,34 @@
 """
-Offline Photogrammetry & Target Geolocation
-Parses ArduPilot .BIN logs, syncs with image timestamps, runs YOLO, and raycasts targets.
+Offline Photogrammetry & Target Geolocation (Bulletproof Time Sync)
+Automatically scans the logs_csv directory, corrects timezone offsets, and matches images.
 """
 
 import csv
 import glob
 import math
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import cv2
 import numpy as np
 import yaml
-from pymavlink import mavutil
 from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R
 from ultralytics import YOLO
 
-# --- CONFIGURATION PATHS ---
-# 1. Dynamically find the exact folder THIS script is sitting in
+# --- DIRECTORY ANCHORS ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PACKAGE_ROOT = os.path.dirname(SCRIPT_DIR)
+IMAGE_DIR = "/home/nds2/camera_captures_calibrated"
+OUTPUT_DIR = "/home/nds2/camera_captures_processed"
 
-# 2. Anchor all your config files to this directory
-BIN_LOG_PATH = os.path.join(SCRIPT_DIR, "00000032.BIN")
-IMAGE_DIR = os.path.join(SCRIPT_DIR, "camera_captures")
-YOLO_MODEL_PATH = os.path.join(SCRIPT_DIR, "yolo26n_v1.0.engine")
-FLIGHT_CONFIG_PATH = os.path.join(SCRIPT_DIR, "offline_flight_config.yaml")
-CAMERA_INFO_PATH = os.path.join(SCRIPT_DIR, "arducam_info.yaml")
-OUTPUT_CSV = os.path.join(SCRIPT_DIR, "mission_results.csv")
-# Earth radius in meters
+LOGS_CSV_DIR = os.path.join(SCRIPT_DIR, "logs_csv")
+
+YOLO_MODEL_PATH = os.path.join(PACKAGE_ROOT, "models", "yolo26n_v1.0.engine")
+FLIGHT_CONFIG_PATH = os.path.join(PACKAGE_ROOT, "config", "offline_flight_config.yaml")
+CAMERA_INFO_PATH = os.path.join(PACKAGE_ROOT, "config", "arducam_info.yaml")
+OUTPUT_CSV = os.path.join(OUTPUT_DIR, "mission_results.csv")
+
 R_EARTH = 6378137.0
 
 
@@ -37,139 +37,135 @@ def load_yaml(filepath):
         return yaml.safe_load(f)
 
 
-def gps_time_to_datetime(gps_week, gps_ms):
-    """Converts atomic GPS time (Week + Milliseconds) to a standard UTC datetime."""
-    # GPS epoch started on Jan 6, 1980
-    gps_epoch = datetime(1980, 1, 6, 0, 0, 0)
-    # GPS time is ahead of UTC by 18 leap seconds (as of recent years)
-    leap_seconds = 18
-
-    elapsed = timedelta(weeks=gps_week, milliseconds=gps_ms, seconds=-leap_seconds)
-    return gps_epoch + elapsed
-
-
-def parse_flight_log(bin_path):
-    """
-    Cracks open the DataFlash .BIN log and builds an interpolated timeline
-    of the drone's telemetry so we can query it by Unix timestamp.
-    """
-    print(f"📖 Parsing Flight Log: {bin_path}...")
-    mlog = mavutil.mavlink_connection(bin_path)
-
-    time_us_to_unix = {}
-    telemetry = []
-
-    while True:
-        msg = mlog.recv_match(type=["GPS", "ATT", "POS"], blocking=False)
-        if msg is None:
-            break
-
-        msg_type = msg.get_type()
-        time_us = msg.TimeUS
-
-        # Sync the internal boot clock (TimeUS) to Real-World GPS Time
-        if msg_type == "GPS" and msg.Status >= 3:  # 3 = 3D Fix
-            dt = gps_time_to_datetime(msg.GWk, msg.GMS)
-            time_us_to_unix[time_us] = dt.timestamp()
-
-        # Grab Attitude (Roll/Pitch/Yaw)
-        elif msg_type == "ATT":
-            telemetry.append(
-                {
-                    "time_us": time_us,
-                    "roll": math.radians(msg.Roll),
-                    "pitch": math.radians(msg.Pitch),
-                    "yaw": math.radians(msg.Yaw),
-                    "type": "ATT",
-                }
-            )
-
-        # Grab Position (Lat/Lon/Alt)
-        elif msg_type == "POS":
-            telemetry.append(
-                {
-                    "time_us": time_us,
-                    "lat": msg.Lat,
-                    "lon": msg.Lng,
-                    "alt": msg.Alt,  # Altitude in meters
-                    "type": "POS",
-                }
-            )
-
-    print("⏳ Synchronizing clocks and building interpolation tables...")
-
-    # We need a continuous time reference. We will match TimeUS to the closest mapped Unix time.
-    # (Assuming clock drift is negligible over a single flight)
-    us_keys = sorted(list(time_us_to_unix.keys()))
-    if not us_keys:
-        raise ValueError("No GPS 3D Fix found in log. Cannot sync time!")
-
-    # Separate data into arrays for SciPy interpolation
-    pos_data = [t for t in telemetry if t["type"] == "POS"]
-    att_data = [t for t in telemetry if t["type"] == "ATT"]
-
-    # Map TimeUS to Unix Epoch based on the first GPS lock offset
-    time_offset = time_us_to_unix[us_keys[0]] - (us_keys[0] / 1e6)
-
-    # Create Interpolation Functions
-    get_lat = interp1d(
-        [(p["time_us"] / 1e6) + time_offset for p in pos_data],
-        [p["lat"] for p in pos_data],
-        fill_value="extrapolate",
-    )
-    get_lon = interp1d(
-        [(p["time_us"] / 1e6) + time_offset for p in pos_data],
-        [p["lon"] for p in pos_data],
-        fill_value="extrapolate",
-    )
-    get_alt = interp1d(
-        [(p["time_us"] / 1e6) + time_offset for p in pos_data],
-        [p["alt"] for p in pos_data],
-        fill_value="extrapolate",
-    )
-
-    get_roll = interp1d(
-        [(a["time_us"] / 1e6) + time_offset for a in att_data],
-        [a["roll"] for a in att_data],
-        fill_value="extrapolate",
-    )
-    get_pitch = interp1d(
-        [(a["time_us"] / 1e6) + time_offset for a in att_data],
-        [a["pitch"] for a in att_data],
-        fill_value="extrapolate",
-    )
-    get_yaw = interp1d(
-        [(a["time_us"] / 1e6) + time_offset for a in att_data],
-        [a["yaw"] for a in att_data],
-        fill_value="extrapolate",
-    )
-
-    return lambda t: (
-        get_lat(t),
-        get_lon(t),
-        get_alt(t),
-        get_roll(t),
-        get_pitch(t),
-        get_yaw(t),
-    )
-
-
 def parse_image_time(filename):
-    """Extracts the datetime from: img_YYYYMMDD_HHMM_count_HHMMSS_mmm.webp"""
+    """Extracts datetime from filename, assumes EDT (UTC-4), returns true UTC Unix Time."""
     base = os.path.basename(filename)
     parts = base.split("_")
-    # Parts: ['img', '20260415', '1200', '0001', '120005', '123.webp']
-    date_str = parts[1]
-    time_str = parts[4]
-    ms_str = parts[5].split(".")[0]
+    date_str, time_str, ms_str = parts[1], parts[4], parts[5].split(".")[0]
 
-    dt_str = f"{date_str}_{time_str}_{ms_str}"
-    dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S_%f")
-    return dt.timestamp()
+    # Parse the string into a naive datetime
+    dt_naive = datetime.strptime(f"{date_str}_{time_str}_{ms_str}", "%Y%m%d_%H%M%S_%f")
+
+    # Force it to EDT (Indiana Time) and convert to Unix Timestamp
+    edt_tz = timezone(timedelta(hours=-4))
+    return dt_naive.replace(tzinfo=edt_tz).timestamp()
+
+
+def parse_csv_time(time_str):
+    """Parses '2026-04-09 21:15:19.662' (UTC) into a true UTC Unix Timestamp."""
+    dt_naive = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
+    # Force it to recognize this string as UTC to bypass local machine offsets
+    return dt_naive.replace(tzinfo=timezone.utc).timestamp()
+
+
+class CSVLogManager:
+    """Scans all telemetry CSVs and intelligently loads the correct one for a given timestamp."""
+
+    def __init__(self, logs_directory):
+        self.logs_dir = logs_directory
+        self.log_index = []
+        self.active_log = None
+        self.active_telemetry_fn = None
+        self.active_home_alt = None
+
+        print("🗄️  Scanning logs_csv directory to build master time index...")
+        self._build_index()
+
+    def _build_index(self):
+        csv_files = glob.glob(os.path.join(self.logs_dir, "*.csv"))
+
+        for csv_path in csv_files:
+            with open(csv_path, "r") as f:
+                reader = csv.DictReader(f)
+                try:
+                    first_row = next(reader)
+                    # 🎯 Fix: Parse the human readable string as UTC instead of using the broken Unix column
+                    start_time = parse_csv_time(first_row["Real_World_Time"])
+
+                    last_row = first_row
+                    for row in reader:
+                        last_row = row
+                    end_time = parse_csv_time(last_row["Real_World_Time"])
+
+                    self.log_index.append(
+                        {
+                            "path": csv_path,
+                            "start": start_time,
+                            "end": end_time,
+                            "filename": os.path.basename(csv_path),
+                        }
+                    )
+                except StopIteration:
+                    continue
+
+        print(f"✅ Indexed {len(self.log_index)} flight logs.\n")
+
+    def get_telemetry(self, image_timestamp):
+        """Finds the correct log for the image, loads it if necessary, and returns the telemetry."""
+        if self.active_log and (
+            self.active_log["start"] <= image_timestamp <= self.active_log["end"]
+        ):
+            return self.active_telemetry_fn(image_timestamp), self.active_home_alt
+
+        for log in self.log_index:
+            if log["start"] <= image_timestamp <= log["end"]:
+                print(f"🔄 Image requires log switch. Loading {log['filename']}...")
+                self._load_log(log)
+                return self.active_telemetry_fn(image_timestamp), self.active_home_alt
+
+        return None, None
+
+    def _load_log(self, log_meta):
+        """Loads the CSV into RAM and builds the SciPy interpolation arrays."""
+        unix_times, lats, lons, alts, rolls, pitches, yaws = [], [], [], [], [], [], []
+        home_alt = None
+
+        with open(log_meta["path"], "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # 🎯 Fix: Parse the human readable string as UTC
+                t = parse_csv_time(row["Real_World_Time"])
+                lat = float(row["Latitude"])
+                lon = float(row["Longitude"])
+                alt_amsl = float(row["Altitude_m"])
+
+                roll = math.radians(float(row["Roll_deg"]))
+                pitch = math.radians(float(row["Pitch_deg"]))
+                yaw = math.radians(float(row["Yaw_deg"]))
+
+                if home_alt is None:
+                    home_alt = alt_amsl
+
+                unix_times.append(t)
+                lats.append(lat)
+                lons.append(lon)
+                alts.append(alt_amsl - home_alt)
+                rolls.append(roll)
+                pitches.append(pitch)
+                yaws.append(yaw)
+
+        get_lat = interp1d(unix_times, lats, fill_value="extrapolate")
+        get_lon = interp1d(unix_times, lons, fill_value="extrapolate")
+        get_alt = interp1d(unix_times, alts, fill_value="extrapolate")
+        get_roll = interp1d(unix_times, rolls, fill_value="extrapolate")
+        get_pitch = interp1d(unix_times, pitches, fill_value="extrapolate")
+        get_yaw = interp1d(unix_times, yaws, fill_value="extrapolate")
+
+        self.active_log = log_meta
+        self.active_home_alt = home_alt
+        self.active_telemetry_fn = lambda t: (
+            get_lat(t),
+            get_lon(t),
+            get_alt(t),
+            get_roll(t),
+            get_pitch(t),
+            get_yaw(t),
+        )
 
 
 def main():
-    # 1. Load Configurations
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
     flight_cfg = load_yaml(FLIGHT_CONFIG_PATH)
     cam_cfg = load_yaml(CAMERA_INFO_PATH)
 
@@ -188,95 +184,177 @@ def main():
         degrees=True,
     )
 
-    # Note: Images are already undistorted by your capture script!
-    # We only need the focal lengths and optical centers to project the ray.
     K = np.array(cam_cfg["camera_matrix"]["data"]).reshape((3, 3))
-    fx, fy = K[0, 0], K[1, 1]
-    cx, cy = K[0, 2], K[1, 2]
+    fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
 
-    # 2. Parse Flight Log & Load YOLO
-    get_telemetry_at_time = parse_flight_log(BIN_LOG_PATH)
+    log_manager = CSVLogManager(LOGS_CSV_DIR)
 
     print(f"🧠 Loading YOLO Engine: {YOLO_MODEL_PATH}...")
     model = YOLO(YOLO_MODEL_PATH, task="detect")
 
     images = glob.glob(os.path.join(IMAGE_DIR, "*.webp"))
     images.sort()
+    print(f"\n🔍 Found {len(images)} images to process.\n")
 
-    print(f"🔍 Found {len(images)} images to process. Beginning Photogrammetry...")
+    total_detections, images_with_hits, images_skipped, out_of_range_count = 0, 0, 0, 0
 
-    # 3. Process Images
     with open(OUTPUT_CSV, mode="w", newline="") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(
             ["Image", "Target_Class", "Confidence", "Lat", "Lon", "Drone_Alt"]
         )
 
-        for img_path in images:
-            img_time = parse_image_time(img_path)
+        for img_idx, img_path in enumerate(images, start=1):
+            base_filename = os.path.basename(img_path)
+            print(f"[{img_idx:04d}/{len(images):04d}] 📷 {base_filename}")
 
-            # Query the flight log for this exact millisecond
-            lat, lon, alt, roll, pitch, yaw = get_telemetry_at_time(img_time)
-            drone_r = R.from_euler("xyz", [roll, pitch, yaw], degrees=False)
+            try:
+                img_time = parse_image_time(img_path)
+            except Exception as e:
+                print(f"           ⚠️  Skipping — bad filename: {e}\n")
+                images_skipped += 1
+                continue
 
             frame = cv2.imread(img_path)
-            results = model(frame, conf=0.50, verbose=False)
+            if frame is None:
+                images_skipped += 1
+                continue
 
-            for box in results[0].boxes:
-                # Get Pixel Coordinates
+            telemetry_data, home_alt = log_manager.get_telemetry(img_time)
+
+            if telemetry_data is None:
+                out_of_range_count += 1
+                images_skipped += 1
+                img_utc = datetime.utcfromtimestamp(img_time).strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                )
+                print(
+                    f"           🚨 No matching CSV log found for {img_utc}. Skipping.\n"
+                )
+                continue
+
+            lat, lon, alt, roll, pitch, yaw = telemetry_data
+            print(
+                f"           📡 Telemetry → lat={float(lat):.5f}, lon={float(lon):.5f}, alt={float(alt):.1f}m"
+            )
+
+            drone_r = R.from_euler("xyz", [roll, pitch, yaw], degrees=False)
+
+            # Using your correct inference settings!
+            results = model(frame, conf=0.50, imgsz=1280, verbose=False, device=0)
+            box_count = len(results[0].boxes)
+
+            if box_count == 0:
+                print(f"           ⏭️  No detections.\n")
+                continue
+
+            rows_written = 0
+
+            # Grab the height and width of the full image for boundary checking
+            img_h, img_w = frame.shape[:2]
+
+            for box_idx, box in enumerate(results[0].boxes, start=1):
+                # Get raw bounding box limits
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                u = x1 + (x2 - x1) / 2.0
-                v = y1 + (y2 - y1) / 2.0
-                conf = float(box.conf[0].cpu().numpy())
-                cls_id = int(box.cls[0].cpu().numpy())
+                u, v = x1 + (x2 - x1) / 2.0, y1 + (y2 - y1) / 2.0
+                conf, cls_id = (
+                    float(box.conf[0].cpu().numpy()),
+                    int(box.cls[0].cpu().numpy()),
+                )
 
-                # Step A: Pixel to Optical Ray (Z-forward)
+                # --- NEW: CROP AND SAVE THE TARGET CHIP ---
+                PADDING = 100  # How many extra pixels to include around the target
+
+                # Calculate padded crop boundaries, making sure we don't slice outside the image
+                crop_y1 = max(0, int(y1) - PADDING)
+                crop_y2 = min(img_h, int(y2) + PADDING)
+                crop_x1 = max(0, int(x1) - PADDING)
+                crop_x2 = min(img_w, int(x2) + PADDING)
+
+                # Slice the numpy array to crop the image
+                target_crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+
+                # Save the cropped chip with a unique filename
+                chip_filename = base_filename.replace(".webp", f"_CHIP_{box_idx}.webp")
+                chip_path = os.path.join(OUTPUT_DIR, chip_filename)
+                cv2.imwrite(chip_path, target_crop)
+                # ------------------------------------------
+
                 ray_opt = np.array([(u - cx) / fx, (v - cy) / fy, 1.0])
                 ray_opt /= np.linalg.norm(ray_opt)
 
-                # Step B: Rotate through Mount -> Drone -> Earth Frame
-                ray_body = mount_r.apply(ray_opt)
-                ray_world = drone_r.apply(ray_body)
+                # Step B: Map OpenCV to Drone's NED Body Frame
+                # Assuming camera is mounted flat, pointing down, top of image facing forward
+                # Opt X (Right) -> NED Y (East)
+                # Opt Y (Down)  -> NED -X (South)
+                # Opt Z (Fwd)   -> NED Z (Down)
+                ray_body_ned = np.array([-ray_opt[1], ray_opt[0], ray_opt[2]])
 
-                # Step C: Calculate physical lens location in the air
-                cam_world_offset = drone_r.apply(np.array([mount_x, mount_y, mount_z]))
-                cam_z = alt + cam_world_offset[2]
+                # Apply YAML mount rotations (Does nothing if yaml is 0,0,0)
+                ray_body_ned = mount_r.apply(ray_body_ned)
 
-                # Step D: Ground Intersection
-                if abs(ray_world[2]) < 1e-6:
-                    continue  # Ray is perfectly horizontal to the ground
+                # Step C: Rotate Drone Body to World NED
+                # ArduPilot uses intrinsic ZYX (Yaw, Pitch, Roll)
+                drone_r_ned = R.from_euler("ZYX", [yaw, pitch, roll], degrees=False)
+                ray_world_ned = drone_r_ned.apply(ray_body_ned)
 
-                t = (ground_z - cam_z) / ray_world[2]
-                if t < 0:
-                    continue  # Looking at the sky
+                # Step D: Convert World NED to World ENU (East, North, Up) for Geography
+                # NED (X=North, Y=East, Z=Down) -> ENU (X=East, Y=North, Z=Up)
+                ray_world_enu = np.array(
+                    [ray_world_ned[1], ray_world_ned[0], -ray_world_ned[2]]
+                )
 
-                # Offset in meters from the drone's center
-                target_offset_x = cam_world_offset[0] + (t * ray_world[0])
-                target_offset_y = cam_world_offset[1] + (t * ray_world[1])
+                # Map physical lens offset from the drone's center
+                cam_world_offset_ned = drone_r_ned.apply(
+                    np.array([mount_x, mount_y, mount_z])
+                )
+                cam_world_offset_enu = np.array(
+                    [
+                        cam_world_offset_ned[1],
+                        cam_world_offset_ned[0],
+                        -cam_world_offset_ned[2],
+                    ]
+                )
 
-                # Step E: Geolocation (Equirectangular projection)
+                cam_z = float(alt) + cam_world_offset_enu[2]
+
+                # Step E: Ground Intersection & Geolocation
+                if abs(ray_world_enu[2]) < 1e-6:
+                    print(f"              ↳ ⚠️  Dropped — ray is horizontal")
+                    continue
+
+                t_ray = (ground_z - cam_z) / ray_world_enu[2]
+                if t_ray < 0:
+                    print(
+                        f"              ↳ ⚠️  Dropped — ray points skyward (t={t_ray:.2f}, cam_z={cam_z:.2f})"
+                    )
+                    continue
+
+                # X is East (Longitude), Y is North (Latitude)
+                target_offset_x = cam_world_offset_enu[0] + (t_ray * ray_world_enu[0])
+                target_offset_y = cam_world_offset_enu[1] + (t_ray * ray_world_enu[1])
+
                 lat_offset = (target_offset_y / R_EARTH) * (180.0 / math.pi)
-                lon_scale = math.cos(math.radians(lat))
+                lon_scale = math.cos(math.radians(float(lat)))
                 lon_offset = (target_offset_x / (R_EARTH * lon_scale)) * (
                     180.0 / math.pi
                 )
 
-                final_lat = lat + lat_offset
-                final_lon = lon + lon_offset
-
-                # Write to CSV
+                final_lat = float(lat) + lat_offset
+                final_lon = float(lon) + lon_offset
                 writer.writerow(
                     [
-                        os.path.basename(img_path),
+                        base_filename,
                         cls_id,
                         f"{conf:.2f}",
                         f"{final_lat:.7f}",
                         f"{final_lon:.7f}",
-                        f"{alt:.2f}",
+                        f"{float(alt):.2f}",
                     ]
                 )
+                rows_written += 1
+                total_detections += 1
 
-                # Draw on the image and save for human review
                 cv2.circle(frame, (int(u), int(v)), 30, (0, 0, 255), 4)
                 cv2.putText(
                     frame,
@@ -288,10 +366,17 @@ def main():
                     3,
                 )
 
-            # Overwrite or save to a new "processed" directory
-            cv2.imwrite(img_path.replace(".webp", "_processed.webp"), frame)
+            if rows_written > 0:
+                images_with_hits += 1
+                cv2.imwrite(
+                    os.path.join(
+                        OUTPUT_DIR, base_filename.replace(".webp", "_processed.webp")
+                    ),
+                    frame,
+                )
+                print(f"           💾 Saved {rows_written} target(s).\n")
 
-    print(f"✅ Mission Complete. Results saved to {OUTPUT_CSV}")
+    print(f"\n✅ Finished processing. Valid Detections: {total_detections}")
 
 
 if __name__ == "__main__":

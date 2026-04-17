@@ -22,3 +22,4 @@ mav.tlog*
 *.repos
 venv/
 arducam_calib_data/
+src/vision_pipeline/models/yolo26n_v1.0.engine

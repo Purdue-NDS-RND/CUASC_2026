@@ -6,17 +6,19 @@ Subscribes to raw camera images, slices them, runs YOLO inference
 publishes the bounding boxes to the drone control pipeline.
 """
 
+import os
+
 import cv2
 import numpy as np
 import rclpy
 import torch
+from ament_index_python.packages import get_package_share_directory
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
 from torchvision.ops import nms
 from ultralytics import YOLO
-from vision_msgs.msg import Detection2D, ObjectHypothesisWithPose
+from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 
 
 class YoloNode(Node):
@@ -31,53 +33,52 @@ class YoloNode(Node):
         self.declare_parameter("overlap_ratio", 0.2)
         self.declare_parameter("publish_debug_image", True)
 
-        # 1. Get the filename from the parameter
+        # Resolve the full path to the model inside the package's share directory
         model_filename = (
             self.get_parameter("model_path").get_parameter_value().string_value
         )
-
-        # 2. Dynamically find the path to your package's "share" directory
         package_share_dir = get_package_share_directory("vision_pipeline")
-
-        # 3. Combine them to point to the new 'models' folder
         full_model_path = os.path.join(package_share_dir, "models", model_filename)
 
-        self.get_logger().info(f"Loading YOLO model: {full_model_path}...")
+        # Load the YOLO model ONCE using the resolved path
+        self.get_logger().info(f"Loading YOLO model from: {full_model_path} ...")
         self._model = YOLO(full_model_path, task="detect")
+        self.get_logger().info("✅ Model loaded successfully!")
 
         self._cv_bridge = CvBridge()
 
-        # Load the YOLO model (TensorRT engine)
-        model_path = self.get_parameter("model_path").get_parameter_value().string_value
-        self.get_logger().info(f"Loading YOLO model: {model_path}...")
-        self._model = YOLO(model_path, task="detect")
-        self.get_logger().info("✅ Model loaded successfully!")
-
         # ---------------------------------------------------------
-        # THE SUBSCRIBER: Listens for images from your ImageGrabber
+        # SUBSCRIBER: Listens for images from ImageGrabber
         # ---------------------------------------------------------
         self.create_subscription(
             Image,
             "/camera/image_raw",
             self._image_callback,
-            10,  # Queue size
+            10,
         )
 
         # ---------------------------------------------------------
-        # THE PUBLISHERS: Sends data to your teammate's Localizer
+        # PUBLISHERS
+        # BUG FIX: was declared as Detection2D (singular) but we
+        # publish a Detection2DArray. Mismatched types silently
+        # drop all messages at the subscriber end.
         # ---------------------------------------------------------
-        # Note: We use the exact topic name the localizer is expecting!
         self._detection_pub = self.create_publisher(
-            Detection2D, "/drone_control/detection", 10
+            Detection2DArray, "/drone_control/detection", 10
         )
 
-        # Optional: A topic to view the drawn bounding boxes in RViz/rqt
+        # Optional: draw bounding boxes for viewing in RViz / rqt_image_view
         self._debug_img_pub = self.create_publisher(
             Image, "/vision_pipeline/debug_image", 10
         )
 
+    # ------------------------------------------------------------------
+    # Image slicing
+    # ------------------------------------------------------------------
+
     def _slice_image(self, image, slice_size, overlap_ratio):
-        """Manually slice image into overlapping tiles"""
+        """Slice image into overlapping tiles so small objects near tile
+        borders are not missed."""
         h, w = image.shape[:2]
         slices = []
         step = int(slice_size * (1 - overlap_ratio))
@@ -94,29 +95,36 @@ class YoloNode(Node):
                 break
         return slices
 
+    # ------------------------------------------------------------------
+    # Non-Maximum Suppression
+    # ------------------------------------------------------------------
+
     def _apply_nms(self, all_boxes, iou_threshold):
-        """Remove duplicate detections using PyTorch NMS"""
+        """Remove duplicate detections that span tile boundaries."""
         if len(all_boxes) == 0:
             return []
 
         boxes_tensor = torch.tensor(
-            [[box["x1"], box["y1"], box["x2"], box["y2"]] for box in all_boxes],
+            [[b["x1"], b["y1"], b["x2"], b["y2"]] for b in all_boxes],
             dtype=torch.float32,
         )
         scores_tensor = torch.tensor(
-            [box["conf"] for box in all_boxes], dtype=torch.float32
+            [b["conf"] for b in all_boxes], dtype=torch.float32
         )
 
         keep_indices = nms(boxes_tensor, scores_tensor, iou_threshold)
         return [all_boxes[i] for i in keep_indices.tolist()]
 
-    def _image_callback(self, msg: Image) -> None:
-        """This function runs EVERY TIME a new image arrives from the camera."""
+    # ------------------------------------------------------------------
+    # Main callback
+    # ------------------------------------------------------------------
 
-        # 1. Convert ROS Image message back to OpenCV NumPy array
+    def _image_callback(self, msg: Image) -> None:
+        """Runs every time a new image arrives from the camera."""
+
         frame = self._cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
 
-        # Fetch dynamic parameters
+        # Read parameters dynamically so they can be tuned at runtime
         conf_thresh = (
             self.get_parameter("conf_threshold").get_parameter_value().double_value
         )
@@ -128,11 +136,10 @@ class YoloNode(Node):
         )
         overlap = self.get_parameter("overlap_ratio").get_parameter_value().double_value
 
-        # 2. Slice the image
+        # Slice → infer → collect raw detections
         slices = self._slice_image(frame, slice_size, overlap)
         all_boxes = []
 
-        # 3. Run Inference on each slice
         for slice_img, offset_x, offset_y in slices:
             results = self._model(slice_img, conf=conf_thresh, verbose=False)
 
@@ -140,45 +147,43 @@ class YoloNode(Node):
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                 all_boxes.append(
                     {
-                        "x1": x1 + offset_x,
-                        "y1": y1 + offset_y,
-                        "x2": x2 + offset_x,
-                        "y2": y2 + offset_y,
+                        "x1": float(x1) + offset_x,
+                        "y1": float(y1) + offset_y,
+                        "x2": float(x2) + offset_x,
+                        "y2": float(y2) + offset_y,
                         "conf": float(box.conf[0].cpu().numpy()),
                         "cls": int(box.cls[0].cpu().numpy()),
                     }
                 )
 
-        # 4. Apply NMS
+        # Remove cross-tile duplicates
         final_boxes = self._apply_nms(all_boxes, iou_thresh)
 
-        # 5. Convert to ROS Detection2D messages and Publish
+        # Pack into a Detection2DArray and publish once per frame
+        det_array_msg = Detection2DArray()
+        det_array_msg.header.stamp = msg.header.stamp
+        det_array_msg.header.frame_id = msg.header.frame_id
+
         for box in final_boxes:
             det_msg = Detection2D()
-            det_msg.header.stamp = msg.header.stamp  # Use the original image timestamp!
-            det_msg.header.frame_id = msg.header.frame_id
 
-            # Calculate center point and size for ROS message format
             width = box["x2"] - box["x1"]
             height = box["y2"] - box["y1"]
-            center_x = box["x1"] + (width / 2.0)
-            center_y = box["y1"] + (height / 2.0)
-
-            det_msg.bbox.center.position.x = float(center_x)
-            det_msg.bbox.center.position.y = float(center_y)
-            det_msg.bbox.size_x = float(width)
-            det_msg.bbox.size_y = float(height)
+            det_msg.bbox.center.position.x = box["x1"] + (width / 2.0)
+            det_msg.bbox.center.position.y = box["y1"] + (height / 2.0)
+            det_msg.bbox.size_x = width
+            det_msg.bbox.size_y = height
 
             result = ObjectHypothesisWithPose()
-            result.hypothesis.class_id = str(
-                str(box["cls"])
-            )  # Target Localizer expects a string ID
-            result.hypothesis.score = float(box["conf"])
+            result.hypothesis.class_id = str(box["cls"])
+            result.hypothesis.score = box["conf"]
             det_msg.results.append(result)
 
-            self._detection_pub.publish(det_msg)
+            det_array_msg.detections.append(det_msg)
 
-        # 6. (Optional) Draw boxes and publish debug image so you can view it live
+        self._detection_pub.publish(det_array_msg)
+
+        # Optional live debug view
         if self.get_parameter("publish_debug_image").get_parameter_value().bool_value:
             debug_frame = frame.copy()
             for box in final_boxes:

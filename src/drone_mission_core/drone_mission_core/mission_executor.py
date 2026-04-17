@@ -6,12 +6,19 @@ from typing import Optional
 
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped
-from mavros_msgs.msg import GlobalPositionTarget, PositionTarget, State
+from mavros_msgs.msg import (
+    AttitudeTarget,
+    ExtendedState,
+    GlobalPositionTarget,
+    PositionTarget,
+    State,
+)
 from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import NavSatFix
+from std_srvs.srv import SetBool
 
 from .mission_api import MissionFailurePolicy, MissionStatus
 from .mission_context import MissionContext
@@ -31,11 +38,13 @@ class MissionExecutorNode(Node):
 
         self._mavros_state: Optional[State] = None
         self._local_pose: Optional[PoseStamped] = None
+        self._extended_state: Optional[ExtendedState] = None
         self._global_gps: Optional[NavSatFix] = None
         self._target_detection: Optional[PointStamped] = None
         self._image_size: Optional[tuple[int, int]] = None
         self._managed_global_setpoint: Optional[GlobalPositionTarget] = None
         self._managed_local_velocity_setpoint: Optional[PositionTarget] = None
+        self._managed_attitude_setpoint: Optional[AttitudeTarget] = None
 
         self._local_setpoint_pub = self.create_publisher(
             PoseStamped,
@@ -52,6 +61,11 @@ class MissionExecutorNode(Node):
             "/mavros/setpoint_raw/local",
             10,
         )
+        self._attitude_setpoint_pub = self.create_publisher(
+            AttitudeTarget,
+            "/mavros/setpoint_raw/attitude",
+            10,
+        )
 
         self.create_subscription(State, "/mavros/state", self._on_mavros_state, 10)
         self.create_subscription(
@@ -59,6 +73,12 @@ class MissionExecutorNode(Node):
             "/mavros/local_position/pose",
             self._on_local_pose,
             qos_profile_sensor_data,
+        )
+        self.create_subscription(
+            ExtendedState,
+            "/mavros/extended_state",
+            self._on_extended_state,
+            10,
         )
         self.create_subscription(
             NavSatFix,
@@ -85,6 +105,10 @@ class MissionExecutorNode(Node):
         self._gimbal_client = self.create_client(
             GimbalManagerPitchyaw,
             "drone_utils/set_gimbal_point",
+        )
+        self._target_cv_control_client = self.create_client(
+            SetBool,
+            "/drone_package_drop/set_target_cv_enabled",
         )
 
         self._mission_context = MissionContext(self)
@@ -132,6 +156,9 @@ class MissionExecutorNode(Node):
 
     def _on_local_pose(self, msg: PoseStamped) -> None:
         self._local_pose = msg
+
+    def _on_extended_state(self, msg: ExtendedState) -> None:
+        self._extended_state = msg
 
     def _on_global_gps(self, msg: NavSatFix) -> None:
         self._global_gps = msg

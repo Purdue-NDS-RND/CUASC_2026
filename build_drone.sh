@@ -1,5 +1,5 @@
 #!/bin/bash
-# get all packages with the name starting with drone_*
+# get all packages with the name starting with drone_* and vision_pipeline
 
 set -e
 
@@ -11,7 +11,7 @@ for arg in "$@"; do
 			;;
 		--help|-h)
 			echo "Usage: $0 [--clean]"
-			echo "  --clean, -c   Remove build/install/log artifacts for drone_* packages before rebuilding"
+			echo "  --clean, -c   Remove build/install/log artifacts for drone_* and vision_pipeline before rebuilding"
 			exit 0
 			;;
 		*)
@@ -22,21 +22,23 @@ for arg in "$@"; do
 	esac
 done
 
-packages=$(find src -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | grep '^drone_' | sort)
+packages=$(find src -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | grep -E '^(drone_.*|vision_pipeline)$' | sort)
 
 if [ -z "$packages" ]; then
-	echo "No packages matching drone_* found under src/."
+	echo "No packages matching drone_* or vision_pipeline found under src/."
 	exit 1
 fi
 
 echo -e "Building packages:\n$packages\n"
 
 if [ "$clean" -eq 1 ]; then
-	echo "Cleaning drone_* build/install/log artifacts..."
-	rm -rf build/drone_* install/drone_* log/latest_build/drone_* log/latest_test/drone_*
+	echo "Cleaning drone_* and vision_pipeline build/install/log artifacts..."
+	rm -rf \
+		build/drone_* install/drone_* log/latest_build/drone_* log/latest_test/drone_* \
+		build/vision_pipeline install/vision_pipeline log/latest_build/vision_pipeline log/latest_test/vision_pipeline
 fi
 
-colcon build --packages-select $packages
+colcon build --packages-select $packages 
 
 
 source install/setup.bash

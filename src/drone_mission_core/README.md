@@ -40,6 +40,7 @@ Defined in `drone_mission_core/mission_context.py`.
 - local pose access
 - global GPS access
 - target detection and image size access for vision-guided missions
+- target-detection cache clearing and target-CV enable/disable requests
 - clock/logger access
 - takeoff requests through `drone_utils/takeoff`
 - local position setpoint management
@@ -87,6 +88,7 @@ Responsibilities:
 | `/mavros/set_mode` | `mavros_msgs/SetMode` | Mode changes such as `RTL` |
 | `/mavros/cmd/command` | `mavros_msgs/CommandLong` | Shared servo / actuator commands |
 | `drone_utils/set_gimbal_point` | `mavros_msgs/GimbalManagerPitchyaw` | Shared gimbal pointing requests |
+| `/drone_package_drop/set_target_cv_enabled` | `std_srvs/SetBool` | Enable or disable target detection work |
 
 ## Sequence YAML Shape
 

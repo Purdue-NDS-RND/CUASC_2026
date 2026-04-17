@@ -12,11 +12,25 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        # Using glob automatically grabs all files in these directories
-        (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
-        (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
-        (os.path.join("share", package_name, "urdf"), glob("urdf/*.urdf")),
-        (os.path.join("share", package_name, "models"), glob("models/*.engine")),
+        # Tell ROS to copy your launch files
+        (
+            os.path.join("share", package_name, "launch"),
+            glob(os.path.join("launch", "*launch.[pxy][yma]*")),
+        ),
+        # Tell ROS to copy your yaml files
+        (
+            os.path.join("share", package_name, "config"),
+            glob(os.path.join("config", "*.yaml")),
+        ),
+        # Tell ROS to copy your YOLO engine
+        (
+            os.path.join("share", package_name, "models"),
+            glob(os.path.join("models", "*")),
+        ),
+        (
+            os.path.join("share", package_name, "urdf"),
+            glob(os.path.join("urdf", "*.urdf")),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -28,6 +42,7 @@ setup(
         "console_scripts": [
             "image_grabber = vision_pipeline.image_grabber:main",
             "yolo_node = vision_pipeline.yolo_node:main",
-            "mission_logger = vision_pipeline.mission_logger:main", # <-- New!
+            "mission_logger = vision_pipeline.mission_logger:main",
         ],
     },
+)

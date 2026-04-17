@@ -16,7 +16,7 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
 from torchvision.ops import nms
 from ultralytics import YOLO
-from vision_msgs.msg import Detection2D, ObjectHypothesisWithPose
+from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 
 
 class YoloNode(Node):
@@ -152,31 +152,30 @@ class YoloNode(Node):
         # 4. Apply NMS
         final_boxes = self._apply_nms(all_boxes, iou_thresh)
 
-        # 5. Convert to ROS Detection2D messages and Publish
+        # 5. Convert to ROS Detection2DArray message
+        det_array_msg = Detection2DArray()
+        det_array_msg.header.stamp = msg.header.stamp
+        det_array_msg.header.frame_id = msg.header.frame_id
+
         for box in final_boxes:
             det_msg = Detection2D()
-            det_msg.header.stamp = msg.header.stamp  # Use the original image timestamp!
-            det_msg.header.frame_id = msg.header.frame_id
 
-            # Calculate center point and size for ROS message format
             width = box["x2"] - box["x1"]
             height = box["y2"] - box["y1"]
-            center_x = box["x1"] + (width / 2.0)
-            center_y = box["y1"] + (height / 2.0)
-
-            det_msg.bbox.center.position.x = float(center_x)
-            det_msg.bbox.center.position.y = float(center_y)
+            det_msg.bbox.center.position.x = float(box["x1"] + (width / 2.0))
+            det_msg.bbox.center.position.y = float(box["y1"] + (height / 2.0))
             det_msg.bbox.size_x = float(width)
             det_msg.bbox.size_y = float(height)
 
             result = ObjectHypothesisWithPose()
-            result.hypothesis.class_id = str(
-                str(box["cls"])
-            )  # Target Localizer expects a string ID
+            result.hypothesis.class_id = str(box["cls"])
             result.hypothesis.score = float(box["conf"])
             det_msg.results.append(result)
 
-            self._detection_pub.publish(det_msg)
+            det_array_msg.detections.append(det_msg)
+
+        # Publish the array ONCE per frame
+        self._detection_pub.publish(det_array_msg)
 
         # 6. (Optional) Draw boxes and publish debug image so you can view it live
         if self.get_parameter("publish_debug_image").get_parameter_value().bool_value:

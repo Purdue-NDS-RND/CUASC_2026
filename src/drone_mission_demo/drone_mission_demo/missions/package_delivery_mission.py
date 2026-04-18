@@ -99,6 +99,9 @@ class PackageDeliveryMission(BaseMission):
         self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
         self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
         self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
+        self._enable_gimbal_pointing = bool(
+            config.get("enable_gimbal_pointing", True)
+        )
         self._centering_gain_mps_per_m = float(
             config.get("centering_gain_mps_per_m", 0.75)
         )
@@ -620,6 +623,8 @@ class PackageDeliveryMission(BaseMission):
         )
 
     def _request_gimbal_if_ready(self, context: MissionContext) -> None:
+        if not self._enable_gimbal_pointing:
+            return
         if self._gimbal_requested or not context.gimbal_service_ready():
             return
         context.point_gimbal(

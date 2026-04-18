@@ -125,6 +125,13 @@ class MissionLogger(Node):
         self.create_subscription(
             Image, "/camera/image_raw", self._on_every_frame, qos_profile
         )
+<<<<<<< HEAD
+
+        img_sub = message_filters.Subscriber(
+            self, Image, "/camera/image_raw", qos_profile=qos_profile
+        )
+=======
+>>>>>>> b28bae74c743b0c84c627562fefc17c526cedfc1
         self.create_subscription(
             PoseStamped,
             "/mavros/local_position/pose",
@@ -135,6 +142,9 @@ class MissionLogger(Node):
             HomePosition, "/mavros/home_position/home", self._on_home, 10
         )
 
+<<<<<<< HEAD
+        img_sub = message_filters.Subscriber(self, Image, "/camera/image_raw")
+=======
         # --- The Synchronizer Setup ---
         # Provide the QoS profile so it can hear the Best Effort camera
         img_sub = message_filters.Subscriber(
@@ -142,6 +152,7 @@ class MissionLogger(Node):
         )
 
         # YOLO publishes Reliably, so it does not need a special QoS profile here
+>>>>>>> b28bae74c743b0c84c627562fefc17c526cedfc1
         det_sub = message_filters.Subscriber(
             self, Detection2DArray, "/drone_control/detection"
         )

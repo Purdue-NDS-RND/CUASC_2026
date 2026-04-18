@@ -21,3 +21,4 @@ target_cv:
   ros__parameters:
     image_topic: "camera/image"
     debug_view: false
+    start_enabled: false

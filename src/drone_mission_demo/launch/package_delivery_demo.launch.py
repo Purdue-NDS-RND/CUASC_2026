@@ -65,7 +65,7 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "sequence",
-                default_value="config/sequences/package_drop_demo.yaml",
+                default_value="config/sequences/package_delivery_demo.yaml",
                 description="Mission sequence YAML relative to the drone_mission_demo package",
             ),
             takeoff_service_node,

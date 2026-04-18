@@ -6,17 +6,21 @@ mission_sequence:
       config:
         target_altitude_m: 15.0
 
-    - type: package_drop
-      name: package_drop
+    - type: package_delivery
+      name: package_delivery
       failure_policy: continue_to_next
       config:
-        # Offset from the default SITL spawn so fake-drop still exercises transit.
         target_latitude: -35.3631271
         target_longitude: 149.1653479
         transit_altitude_m: 15.0
-        drop_altitude_m: 4.0
+        landing_check_threshold_m: 6.0
+        relaunch_altitude_m: 12.0
         fake_drop: true
         descent_rate_mps: 0.5
+        final_descent_rate_mps: 0.35
+        delivery_dwell_s: 5.0
+        guided_relaunch_rate_mps: 0.6
+        guided_relaunch_max_climb_rate_mps: 2.5
         centering_tolerance_px: 15.0
         arrival_radius_m: 3.0
         arrival_alt_tolerance_m: 2.0
@@ -24,7 +28,7 @@ mission_sequence:
         max_recovery_altitude_m: 40.0
         max_recovery_attempts: 10
         centering_dwell_s: 1.0
-        drop_hover_dwell_s: 8.0
+        touchdown_dwell_s: 0.5
         servo_channel: 9
         servo_open_pwm: 1900
         gimbal_pitch_deg: -90.0

@@ -42,7 +42,7 @@ setup(
         "console_scripts": [
             "image_grabber = vision_pipeline.image_grabber:main",
             "yolo_node = vision_pipeline.yolo_node:main",
-            "mission_logger = vision_pipeline.mission_logger:main",
+            "mission_logger = vision_pipeline.mission_logger:main", # <-- New!
         ],
     },
 )

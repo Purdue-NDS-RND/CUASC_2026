@@ -154,6 +154,25 @@ class ImageGrabber(Node):
         new_K, roi = cv2.getOptimalNewCameraMatrix(
             K, D, (self.width, self.height), 0, (self.width, self.height)
         )
+
+        # --- ADD THESE LINES: Overwrite the message so downstream nodes use new_K ---
+        self._camera_info_msg.k = new_K.flatten().tolist()
+        self._camera_info_msg.p = [
+            new_K[0, 0],
+            new_K[0, 1],
+            new_K[0, 2],
+            0.0,
+            new_K[1, 0],
+            new_K[1, 1],
+            new_K[1, 2],
+            0.0,
+            new_K[2, 0],
+            new_K[2, 1],
+            new_K[2, 2],
+            0.0,
+        ]
+        # ----------------------------------------------------------------------------
+
         self.map1, self.map2 = cv2.initUndistortRectifyMap(
             K, D, None, new_K, (self.width, self.height), cv2.CV_16SC2
         )

@@ -62,6 +62,9 @@ class MissionLogger(Node):
         # ------------------------------------------------------------------
         self._frame_counter = 0  # increments for every received frame
         self._target_counter = 1  # increments only when a new target is logged
+
+        # NEW: Throttle timer for the continuous recorder
+        self._last_continuous_save_time = 0.0
         self.saved_target_locations: List[Tuple[float, float]] = []
         self.min_dist_m = 10.0
 
@@ -174,22 +177,31 @@ class MissionLogger(Node):
     # Continuous frame recorder
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Continuous frame recorder (Throttled to 1 Hz to save SSD space)
+    # ------------------------------------------------------------------
+
     def _on_every_frame(self, msg: Image) -> None:
-        """Saves every incoming frame to disk unconditionally.
+        """Saves incoming frames to disk, but strictly throttled to 1 frame per second."""
 
-        Files are named by a zero-padded counter so they sort correctly
-        in any file browser.  A ROS timestamp is embedded in the name
-        so you can correlate them with the CSV log later if needed.
-        """
-        self._frame_counter += 1
-        frame = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        current_time = (
+            self.get_clock().now().nanoseconds / 1e9
+        )  # Get exact time in seconds
 
-        stamp_sec = msg.header.stamp.sec
-        stamp_ns = msg.header.stamp.nanosec
-        filename = f"frame_{self._frame_counter:06d}_{stamp_sec}_{stamp_ns}.jpg"
-        path = os.path.join(self._frames_dir, filename)
+        # Only save if 1.0 full second has passed since the last save
+        if (current_time - self._last_continuous_save_time) >= 1.0:
+            self._frame_counter += 1
+            frame = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
 
-        cv2.imwrite(path, frame)
+            stamp_sec = msg.header.stamp.sec
+            stamp_ns = msg.header.stamp.nanosec
+            filename = f"frame_{self._frame_counter:06d}_{stamp_sec}_{stamp_ns}.jpg"
+            path = os.path.join(self._frames_dir, filename)
+
+            cv2.imwrite(path, frame)
+
+            # Reset the clock for the next second
+            self._last_continuous_save_time = current_time
 
     # ------------------------------------------------------------------
     # Synchronised target geolocator

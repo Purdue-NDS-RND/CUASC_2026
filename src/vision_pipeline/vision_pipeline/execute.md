@@ -32,7 +32,8 @@ ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765
 # **Terminal 3: Updated (Combines 3-5)** 
 
 (This single command now safely launches the URDF Publisher, the Camera, YOLO, and the Logger, reading all offsets and headless settings directly from the YAML).
-
+sudo systemctl restart nvargus-daemon
+export PYTHONPATH=/home/nds2/dev/VTOL-Project/src/yolo_models/yolo_env/lib/python3.10/site-packages:$PYTHONPATH
 ```bash
 ros2 launch vision_pipeline vision_demo.launch.py
 ```

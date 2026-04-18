@@ -17,7 +17,8 @@ mission_sequence:
         drop_altitude_m: 4.0
         fake_drop: true
         descent_rate_mps: 0.5
-        centering_tolerance_px: 15.0
+        centering_tolerance_norm: 0.05
+        centering_gain_mps_per_norm: 3.0
         arrival_radius_m: 3.0
         arrival_alt_tolerance_m: 2.0
         not_found_ascent_m: 3.0

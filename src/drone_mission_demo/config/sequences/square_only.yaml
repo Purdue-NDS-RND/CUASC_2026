@@ -1,22 +1,22 @@
 mission_sequence:
-  on_failure: abort_and_rtl
+  on_failure: abort_and_rtl                         # Abort the remaining sequence and request RTL on failure.
   missions:
-    - type: takeoff
-      name: takeoff
+    - type: takeoff                                # Mission type registered in the mission framework.
+      name: takeoff                                # Human-readable mission instance name for logs.
       config:
-        target_altitude_m: 10.0
+        target_altitude_m: 10.0                    # Target climb altitude after takeoff in meters.
 
-    - type: local_waypoint
-      name: fly_square
+    - type: local_waypoint                         # Mission that follows a local waypoint pattern file.
+      name: fly_square                             # Human-readable mission instance name for logs.
       config:
-        pattern_file: ../patterns/square.yaml
-        waypoint_altitude_m: 20.0
-        arrival_radius_m: 1.0
-        arrival_height_tolerance_m: 2.0
-        hold_time_s: 2.0
-        desired_yaw_deg: 90.0
+        pattern_file: ../patterns/square.yaml      # Relative path to the waypoint pattern YAML.
+        waypoint_altitude_m: 20.0                  # Altitude to hold while flying the waypoint pattern.
+        arrival_radius_m: 1.0                      # Horizontal distance threshold for reaching each waypoint.
+        arrival_height_tolerance_m: 2.0            # Altitude tolerance when checking waypoint arrival.
+        hold_time_s: 2.0                           # Time to pause at each waypoint before moving on.
+        desired_yaw_deg: 90.0                      # Desired yaw angle while flying the pattern.
 
-    - type: rtl
-      name: rtl
+    - type: rtl                                    # Return-to-launch mission.
+      name: rtl                                    # Human-readable mission instance name for logs.
       config:
-        rtl_mode: "RTL"
+        rtl_mode: "RTL"                            # Flight mode string sent to the FCU for return-to-launch.

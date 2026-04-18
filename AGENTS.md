@@ -10,7 +10,6 @@ A new mission framework was added in **new packages only**:
 
 The existing packages were intentionally left untouched:
 - `src/drone_demo`
-- `src/drone_package_drop`
 - `src/drone_utils`
 - `src/drone_control`
 
@@ -133,12 +132,11 @@ Preferred order:
 3. avoid turning missions back into standalone nodes unless there is a strong reason
 4. keep sequence config YAML-first and human-editable
 
-For future package drop support, the likely next changes are:
+For future mission extensions, the likely next changes are:
 - add global position setpoint support to `MissionContext`
-- add local velocity setpoint support
+- expand local velocity setpoint helpers where mission behaviors need them
 - add gimbal control helper
 - add servo / actuator helper
-- port payload-drop logic into a `PackageDropMission` that keeps its own internal state machine
 
 ## Files Added
 

@@ -2,31 +2,18 @@
 
 from __future__ import annotations
 
-import math
 from enum import Enum, auto
 
-from drone_mission_core.mission_api import BaseMission, MissionStatus
+from drone_mission_core.mission_api import MissionStatus
 from drone_mission_core.mission_context import MissionContext
 from drone_mission_core.registry import register_mission
 from rclpy.time import Time
-
-
-EARTH_RADIUS_M = 6_371_000.0
-TRANSIT_YAW_DEG = 90.0
-HOLD_YAW_DEG = 90.0
-
-
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Horizontal distance in meters between two GPS points."""
-
-    lat1_r, lat2_r = math.radians(lat1), math.radians(lat2)
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(dlat / 2.0) ** 2
-        + math.cos(lat1_r) * math.cos(lat2_r) * math.sin(dlon / 2.0) ** 2
-    )
-    return EARTH_RADIUS_M * 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+from .red_bullseye_mission_base import (
+    HOLD_YAW_DEG,
+    TRANSIT_YAW_DEG,
+    RedBullseyeMissionBase,
+    haversine_distance,
+)
 
 
 class PackageDropState(Enum):
@@ -42,70 +29,25 @@ class PackageDropState(Enum):
 
 
 @register_mission("package_drop")
-class PackageDropMission(BaseMission):
+class PackageDropMission(RedBullseyeMissionBase):
     """Fly to a GPS target, visually track it, descend, and release payload."""
 
     def on_enter(self, context: MissionContext) -> None:
         config = self.spec.config
-        self._target_latitude = float(config.get("target_latitude", 0.0))
-        self._target_longitude = float(config.get("target_longitude", 0.0))
-        self._transit_altitude_m = float(config.get("transit_altitude_m", 20.0))
+        self._load_common_vision_config(config)
         self._drop_altitude_m = float(config.get("drop_altitude_m", 5.0))
         self._descent_rate_mps = float(config.get("descent_rate_mps", 0.5))
-        self._fake_drop = bool(config.get("fake_drop", False))
-        self._centering_tolerance_norm = float(
-            config.get("centering_tolerance_norm", 0.05)
-        )
-        self._arrival_radius_m = float(config.get("arrival_radius_m", 3.0))
-        self._arrival_alt_tolerance_m = float(
-            config.get("arrival_alt_tolerance_m", 2.0)
-        )
-        self._not_found_ascent_m = float(config.get("not_found_ascent_m", 5.0))
-        self._max_recovery_altitude_m = float(
-            config.get("max_recovery_altitude_m", self._transit_altitude_m + 10.0)
-        )
-        self._max_recovery_attempts = int(config.get("max_recovery_attempts", 3))
-        self._centering_dwell_s = float(config.get("centering_dwell_s", 1.0))
         self._drop_hover_dwell_s = float(config.get("drop_hover_dwell_s", 2.0))
-        self._servo_channel = int(config.get("servo_channel", 9))
-        self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
-        self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
-        self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
-        self._centering_gain_mps_per_norm = float(
-            config.get("centering_gain_mps_per_norm", 1.5)
-        )
-        self._max_centering_speed_mps = float(
-            config.get("max_centering_speed_mps", 2.0)
-        )
-        self._target_timeout_s = float(config.get("target_timeout_s", 2.0))
 
         self._state = PackageDropState.INIT
-        self._gimbal_requested = False
-        self._servo_requested = False
+        self._initialize_common_vision_state()
         self._drop_actuated = False
-        self._recovery_attempts = 0
-        self._centering_dwell_start: Time | None = None
         self._drop_hover_start: Time | None = None
-        self._target_loss_start: Time | None = None
-        self._recovery_target_altitude: float | None = None
-        self._recovery_hold_position: tuple[float, float] | None = None
-        self._target_cv_enabled = False
-        self._target_cv_enable_requested = False
-        self._failed = self._target_latitude == 0.0 and self._target_longitude == 0.0
 
-        context.clear_all_setpoints()
-        context.clear_target_tracking_state()
-        self._request_target_cv_enable(context)
-        if self._failed:
-            context.logger.error(
-                f"[{self.name}] target_latitude and target_longitude must be set"
-            )
+        self._enter_common_mission(context)
 
     def on_exit(self, context: MissionContext) -> None:
-        context.clear_all_setpoints()
-        context.clear_target_tracking_state()
-        if context.target_cv_control_ready():
-            context.set_target_cv_enabled(False)
+        self._exit_common_mission(context)
 
     def update(self, context: MissionContext) -> MissionStatus:
         if self._failed:
@@ -251,12 +193,24 @@ class PackageDropMission(BaseMission):
         if context.local_pose is None:
             return MissionStatus.WAITING
 
-        if not self._has_recent_target_detection(context):
+        command = self._get_centering_descent_command(
+            context,
+            target_altitude_m=self._drop_altitude_m,
+            descent_rate_mps=self._descent_rate_mps,
+        )
+        if command is None:
+            self._reset_tracking_filter()
             context.set_local_velocity_setpoint(
                 0.0,
                 0.0,
                 0.0,
                 yaw_deg=HOLD_YAW_DEG,
+            )
+            self._log_velocity_command(
+                context,
+                east_mps=0.0,
+                north_mps=0.0,
+                up_mps=0.0,
             )
             if self._target_loss_start is None:
                 self._target_loss_start = context.now()
@@ -267,27 +221,8 @@ class PackageDropMission(BaseMission):
             return MissionStatus.RUNNING
 
         self._target_loss_start = None
-        detection = context.target_detection
-        error_x_norm = detection.point.x
-        error_y_norm = detection.point.y
-        tracking_error_norm = math.hypot(error_x_norm, error_y_norm)
-
-        velocity_east = error_x_norm * self._centering_gain_mps_per_norm
-        velocity_north = -error_y_norm * self._centering_gain_mps_per_norm
-        speed = math.hypot(velocity_east, velocity_north)
-        if speed > self._max_centering_speed_mps and speed > 0.0:
-            scale = self._max_centering_speed_mps / speed
-            velocity_east *= scale
-            velocity_north *= scale
-
-        altitude_error = abs(
-            context.local_pose.pose.position.z - self._drop_altitude_m
-        )
-        at_drop_altitude = altitude_error <= self._arrival_alt_tolerance_m
-
-        vertical_velocity = 0.0
-        if tracking_error_norm <= self._centering_tolerance_norm:
-            if at_drop_altitude:
+        if command.tracking_error_m <= self._centering_tolerance_m:
+            if command.reached_target_altitude:
                 if self._centering_dwell_start is None:
                     self._centering_dwell_start = context.now()
                     context.logger.info(
@@ -299,15 +234,20 @@ class PackageDropMission(BaseMission):
                     return MissionStatus.RUNNING
             else:
                 self._centering_dwell_start = None
-                vertical_velocity = -abs(self._descent_rate_mps)
         else:
             self._centering_dwell_start = None
 
         context.set_local_velocity_setpoint(
-            velocity_east,
-            velocity_north,
-            vertical_velocity,
+            command.velocity_east_mps,
+            command.velocity_north_mps,
+            command.vertical_velocity_mps,
             yaw_deg=HOLD_YAW_DEG,
+        )
+        self._log_velocity_command(
+            context,
+            east_mps=command.velocity_east_mps,
+            north_mps=command.velocity_north_mps,
+            up_mps=command.vertical_velocity_mps,
         )
         return MissionStatus.RUNNING
 
@@ -365,59 +305,6 @@ class PackageDropMission(BaseMission):
     def _handle_invalid_state(self, _context: MissionContext) -> MissionStatus:
         return MissionStatus.FAILURE
 
-    def _has_recent_target_detection(self, context: MissionContext) -> bool:
-        detection = context.target_detection
-        if detection is None:
-            return False
-        if detection.point.x == -1.0 and detection.point.y == -1.0:
-            return False
-
-        detection_time = Time.from_msg(detection.header.stamp)
-        return context.seconds_since(detection_time) < self._target_timeout_s
-
-    def _hold_current_position(
-        self,
-        context: MissionContext,
-        altitude_m: float | None = None,
-    ) -> None:
-        if context.global_gps is None or context.local_pose is None:
-            return
-
-        hold_altitude = (
-            context.local_pose.pose.position.z
-            if altitude_m is None
-            else float(altitude_m)
-        )
-        context.set_global_position_setpoint(
-            context.global_gps.latitude,
-            context.global_gps.longitude,
-            hold_altitude,
-            yaw_deg=HOLD_YAW_DEG,
-            lock_yaw=True,
-        )
-
-    def _request_gimbal_if_ready(self, context: MissionContext) -> None:
-        if self._gimbal_requested or not context.gimbal_service_ready():
-            return
-        context.point_gimbal(
-            self._gimbal_pitch_deg,
-            self._gimbal_yaw_deg,
-            self._on_gimbal_response,
-        )
-        self._gimbal_requested = True
-        context.logger.info(
-            f"[{self.name}] Pointing gimbal to "
-            f"pitch={self._gimbal_pitch_deg:.1f}, yaw={self._gimbal_yaw_deg:.1f}"
-        )
-
-    def _on_gimbal_response(self, future) -> None:
-        try:
-            result = future.result()
-            if result is None or not result.success:
-                self._gimbal_requested = False
-        except Exception:
-            self._gimbal_requested = False
-
     def _on_servo_response(self, future) -> None:
         self._servo_requested = False
         try:
@@ -426,24 +313,6 @@ class PackageDropMission(BaseMission):
                 self._drop_actuated = True
         except Exception:
             self._drop_actuated = False
-
-    def _request_target_cv_enable(self, context: MissionContext) -> None:
-        if self._target_cv_enabled or self._target_cv_enable_requested:
-            return
-        if not context.target_cv_control_ready():
-            return
-
-        context.logger.info(f"[{self.name}] Enabling target detection")
-        context.set_target_cv_enabled(True, self._on_target_cv_enable_response)
-        self._target_cv_enable_requested = True
-
-    def _on_target_cv_enable_response(self, future) -> None:
-        self._target_cv_enable_requested = False
-        try:
-            result = future.result()
-            self._target_cv_enabled = bool(result is not None and result.success)
-        except Exception:
-            self._target_cv_enabled = False
 
     def _transition_to(
         self,
@@ -455,6 +324,8 @@ class PackageDropMission(BaseMission):
 
         self._centering_dwell_start = None
         self._target_loss_start = None
+        self._last_velocity_log_time = None
+        self._reset_tracking_filter()
         if new_state != PackageDropState.TARGET_NOT_FOUND:
             self._recovery_target_altitude = None
             self._recovery_hold_position = None

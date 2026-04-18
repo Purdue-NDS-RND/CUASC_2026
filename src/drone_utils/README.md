@@ -1,6 +1,6 @@
 # drone_utils
 
-Shared ROS 2 utility nodes and Python helpers used across all drone packages in the CUASC 2026 workspace. Provides reusable services for takeoff, gimbal control, and Gazebo object spawning so that mission-specific packages (`drone_package_drop`, `drone_control`, `drone_demo`) don't duplicate common functionality.
+Shared ROS 2 utility nodes and Python helpers used across the CUASC 2026 workspace. Provides reusable services for takeoff, gimbal control, and Gazebo object spawning so mission packages such as `drone_mission_demo`, `drone_control`, and `drone_demo` don't duplicate common functionality.
 
 ## Nodes
 

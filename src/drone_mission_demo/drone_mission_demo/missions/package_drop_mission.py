@@ -8,6 +8,15 @@ from enum import Enum, auto
 from drone_mission_core.mission_api import BaseMission, MissionStatus
 from drone_mission_core.mission_context import MissionContext
 from drone_mission_core.registry import register_mission
+from drone_mission_core.tracking_projection import (
+    DEFAULT_CAMERA_CALIBRATION_HEIGHT_PX,
+    DEFAULT_CAMERA_CALIBRATION_WIDTH_PX,
+    DEFAULT_CAMERA_FX_PX,
+    DEFAULT_CAMERA_FY_PX,
+    CameraIntrinsics,
+    ground_offset_to_velocity,
+    project_normalized_detection_to_ground_offset,
+)
 from rclpy.time import Time
 
 
@@ -53,9 +62,7 @@ class PackageDropMission(BaseMission):
         self._drop_altitude_m = float(config.get("drop_altitude_m", 5.0))
         self._descent_rate_mps = float(config.get("descent_rate_mps", 0.5))
         self._fake_drop = bool(config.get("fake_drop", False))
-        self._centering_tolerance_norm = float(
-            config.get("centering_tolerance_norm", 0.05)
-        )
+        self._centering_tolerance_m = float(config.get("centering_tolerance_m", 0.35))
         self._arrival_radius_m = float(config.get("arrival_radius_m", 3.0))
         self._arrival_alt_tolerance_m = float(
             config.get("arrival_alt_tolerance_m", 2.0)
@@ -71,11 +78,34 @@ class PackageDropMission(BaseMission):
         self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
         self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
         self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
-        self._centering_gain_mps_per_norm = float(
-            config.get("centering_gain_mps_per_norm", 1.5)
+        self._centering_gain_mps_per_m = float(
+            config.get("centering_gain_mps_per_m", 0.75)
         )
         self._max_centering_speed_mps = float(
             config.get("max_centering_speed_mps", 2.0)
+        )
+        self._camera_intrinsics = CameraIntrinsics(
+            fx_px=float(config.get("camera_fx_px", DEFAULT_CAMERA_FX_PX)),
+            fy_px=float(config.get("camera_fy_px", DEFAULT_CAMERA_FY_PX)),
+            calibration_width_px=float(
+                config.get(
+                    "camera_calibration_width_px",
+                    DEFAULT_CAMERA_CALIBRATION_WIDTH_PX,
+                )
+            ),
+            calibration_height_px=float(
+                config.get(
+                    "camera_calibration_height_px",
+                    DEFAULT_CAMERA_CALIBRATION_HEIGHT_PX,
+                )
+            ),
+        )
+        self._camera_yaw_offset_deg = float(config.get("camera_yaw_offset_deg", 0.0))
+        self._min_projection_altitude_m = float(
+            config.get("min_projection_altitude_m", 0.75)
+        )
+        self._max_projection_distance_m = float(
+            config.get("max_projection_distance_m", 25.0)
         )
         self._target_timeout_s = float(config.get("target_timeout_s", 2.0))
 
@@ -251,7 +281,8 @@ class PackageDropMission(BaseMission):
         if context.local_pose is None:
             return MissionStatus.WAITING
 
-        if not self._has_recent_target_detection(context):
+        tracking = self._get_tracking_solution(context)
+        if tracking is None:
             context.set_local_velocity_setpoint(
                 0.0,
                 0.0,
@@ -267,18 +298,7 @@ class PackageDropMission(BaseMission):
             return MissionStatus.RUNNING
 
         self._target_loss_start = None
-        detection = context.target_detection
-        error_x_norm = detection.point.x
-        error_y_norm = detection.point.y
-        tracking_error_norm = math.hypot(error_x_norm, error_y_norm)
-
-        velocity_east = error_x_norm * self._centering_gain_mps_per_norm
-        velocity_north = -error_y_norm * self._centering_gain_mps_per_norm
-        speed = math.hypot(velocity_east, velocity_north)
-        if speed > self._max_centering_speed_mps and speed > 0.0:
-            scale = self._max_centering_speed_mps / speed
-            velocity_east *= scale
-            velocity_north *= scale
+        tracking_error_m, velocity_east, velocity_north = tracking
 
         altitude_error = abs(
             context.local_pose.pose.position.z - self._drop_altitude_m
@@ -286,7 +306,7 @@ class PackageDropMission(BaseMission):
         at_drop_altitude = altitude_error <= self._arrival_alt_tolerance_m
 
         vertical_velocity = 0.0
-        if tracking_error_norm <= self._centering_tolerance_norm:
+        if tracking_error_m <= self._centering_tolerance_m:
             if at_drop_altitude:
                 if self._centering_dwell_start is None:
                     self._centering_dwell_start = context.now()
@@ -374,6 +394,52 @@ class PackageDropMission(BaseMission):
 
         detection_time = Time.from_msg(detection.header.stamp)
         return context.seconds_since(detection_time) < self._target_timeout_s
+
+    def _get_tracking_solution(
+        self,
+        context: MissionContext,
+    ) -> tuple[float, float, float] | None:
+        if not self._has_recent_target_detection(context):
+            return None
+
+        if context.local_pose is None:
+            return None
+
+        image_size = context.image_size
+        if image_size is None:
+            return None
+
+        detection = context.target_detection
+        if detection is None:
+            return None
+
+        orientation = context.local_pose.pose.orientation
+        projection = project_normalized_detection_to_ground_offset(
+            x_norm=float(detection.point.x),
+            y_norm=float(detection.point.y),
+            image_width=int(image_size[0]),
+            image_height=int(image_size[1]),
+            intrinsics=self._camera_intrinsics,
+            qx=float(orientation.x),
+            qy=float(orientation.y),
+            qz=float(orientation.z),
+            qw=float(orientation.w),
+            altitude_m=float(context.local_pose.pose.position.z),
+            camera_yaw_offset_deg=self._camera_yaw_offset_deg,
+            min_projection_altitude_m=self._min_projection_altitude_m,
+            max_projection_distance_m=self._max_projection_distance_m,
+        )
+        if projection is None:
+            return None
+
+        velocity_east, velocity_north = ground_offset_to_velocity(
+            east_error_m=projection.east_m,
+            north_error_m=projection.north_m,
+            gain_mps_per_m=self._centering_gain_mps_per_m,
+            max_speed_mps=self._max_centering_speed_mps,
+        )
+
+        return projection.horizontal_error_m, velocity_east, velocity_north
 
     def _hold_current_position(
         self,

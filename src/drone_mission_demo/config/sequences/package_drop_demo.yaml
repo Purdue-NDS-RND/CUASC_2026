@@ -17,13 +17,20 @@ mission_sequence:
         drop_altitude_m: 4.0
         fake_drop: true
         descent_rate_mps: 0.5
-        centering_tolerance_norm: 0.05
-        centering_gain_mps_per_norm: 3.0
+        camera_fx_px: 2334.99647
+        camera_fy_px: 2338.06625
+        camera_calibration_width_px: 3840.0
+        camera_calibration_height_px: 2160.0
+        camera_yaw_offset_deg: 0.0
+        centering_tolerance_m: 0.35
+        centering_gain_mps_per_m: 0.75
         arrival_radius_m: 3.0
         arrival_alt_tolerance_m: 2.0
         not_found_ascent_m: 3.0
         max_recovery_altitude_m: 40.0
         max_recovery_attempts: 10
+        min_projection_altitude_m: 0.75
+        max_projection_distance_m: 25.0
         centering_dwell_s: 1.0
         drop_hover_dwell_s: 8.0
         servo_channel: 9

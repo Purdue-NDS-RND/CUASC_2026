@@ -9,7 +9,8 @@
     <parent link="base_link"/>
     <child link="camera_optical_frame"/>
 
-    <origin xyz="0.15 0.0 -0.05" rpy="0.0 0.349 0.0"/>
+    <origin xyz="-0.127 0.0 -0.1524" rpy="0.0 1.5708 0.0"/>
+
   </joint>
 
 </robot>

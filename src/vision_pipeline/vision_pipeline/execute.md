@@ -33,6 +33,9 @@ ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765
 
 (This single command now safely launches the URDF Publisher, the Camera, YOLO, and the Logger, reading all offsets and headless settings directly from the YAML).
 ```bash
+cd ~/dev/CUASC_2026/
+./set_stream_rate.sh
+cd ~/dev/CUASC_2026/src/vision_pipeline/vision_pipeline
 ./vision.sh
 ```
 

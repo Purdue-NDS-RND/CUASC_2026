@@ -1,0 +1,289 @@
+🚀 Pre-flight sequence initiated...
+✅ Environment configured. Launching pipeline!
+[INFO] [launch]: All log files can be found below /home/nds2/.ros/log/2026-04-18-17-49-47-827467-nds2-desktop-6230
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [6240]
+[INFO] [image_grabber-2]: process started with pid [6242]
+[INFO] [yolo_node-3]: process started with pid [6246]
+[INFO] [mission_logger-4]: process started with pid [6248]
+[robot_state_publisher-1] [INFO] [1776548987.992868013] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1776548987.993126288] [robot_state_publisher]: got segment camera_optical_frame
+[image_grabber-2] [INFO] [1776548989.320381645] [image_grabber]: 📷 Loading camera calibration: /home/nds2/dev/CUASC_2026/install/vision_pipeline/share/vision_pipeline/config/arducam_info.yaml
+[image_grabber-2] [INFO] [1776548989.387406536] [image_grabber]:    K  = [2334.99647    0.      1874.05854] ...
+[image_grabber-2]    D  = array('d', [-0.233303, 0.05183, -0.000329, 0.000262, 0.0])
+[image_grabber-2]    P  = [1906.98572    0.      1855.06959] ...
+[image_grabber-2] [INFO] [1776548989.389775205] [image_grabber]: 📐 Computing lens distortion maps (alpha=0)...
+[image_grabber-2] [INFO] [1776548989.472670596] [image_grabber]:    new_K = [1906.9852294921875, 0.0, 1855.0691144687153] ...
+[image_grabber-2]    ROI   = (0, 0, 3839, 2159)
+[image_grabber-2] [INFO] [1776548989.473558191] [image_grabber]: 🎬 GStreamer pipeline:
+[image_grabber-2]    nvarguscamerasrc sensor-id=0 exposuretimerange='1000000 1000000' wbmode=6 ! video/x-raw(memory:NVMM), width=3840, height=2160, format=NV12, framerate=17/1 ! nvvidconv ! video/x-raw, format=BGRx ! videoconvert ! video/x-raw, format=BGR ! appsink drop=1
+[mission_logger-4] [INFO] [1776548990.276501570] [mission_logger]: 🚀 MissionLogger ready.
+[mission_logger-4]    frames  → /home/nds2/CUASC_Mission_Data/Flight_20260418_174950/frames
+[mission_logger-4]    targets → /home/nds2/CUASC_Mission_Data/Flight_20260418_174950/targets
+[mission_logger-4]    CSV     → /home/nds2/CUASC_Mission_Data/Flight_20260418_174950/mission_log.csv
+[mission_logger-4]    mount offset (m)  : x=-0.127 y=0.0 z=-0.1524
+[mission_logger-4]    mount rotation(°) : roll=0.0 pitch=0.0 yaw=0.0
+[mission_logger-4]    sync slop: 0.5 s | min_dist_m: 1.0
+[image_grabber-2] GST_ARGUS: NvArgusCameraSrc: Setting Exposure Time Range : '1000000 1000000'
+[image_grabber-2] GST_ARGUS: Creating output stream
+[image_grabber-2] CONSUMER: Waiting until producer is connected...
+[image_grabber-2] GST_ARGUS: Available Sensor modes :
+[image_grabber-2] GST_ARGUS: 4656 x 3496 FR = 9.000000 fps Duration = 111111112 ; Analog Gain range min 1.000000, max 16.000000; Exposure Range min 13000, max 683709000;
+[image_grabber-2] 
+[image_grabber-2] GST_ARGUS: 3840 x 2160 FR = 17.000000 fps Duration = 58823528 ; Analog Gain range min 1.000000, max 16.000000; Exposure Range min 13000, max 683709000;
+[image_grabber-2] 
+[image_grabber-2] GST_ARGUS: 1920 x 1080 FR = 59.999999 fps Duration = 16666667 ; Analog Gain range min 1.000000, max 16.000000; Exposure Range min 13000, max 683709000;
+[image_grabber-2] 
+[image_grabber-2] GST_ARGUS: 1280 x 720 FR = 120.000005 fps Duration = 8333333 ; Analog Gain range min 1.000000, max 16.000000; Exposure Range min 13000, max 683709000;
+[image_grabber-2] 
+[image_grabber-2] GST_ARGUS: Running with following settings:
+[image_grabber-2]    Camera index = 0 
+[image_grabber-2]    Camera mode  = 1 
+[image_grabber-2]    Output Stream W = 3840 H = 2160 
+[image_grabber-2]    seconds to Run    = 0 
+[image_grabber-2]    Frame Rate = 17.000000 
+[image_grabber-2] GST_ARGUS: Setup Complete, Starting captures for 0 seconds
+[image_grabber-2] GST_ARGUS: Starting repeat capture requests.
+[image_grabber-2] CONSUMER: Producer has connected; continuing.
+[image_grabber-2] [ WARN:0] global ./modules/videoio/src/cap_gstreamer.cpp (1100) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+[image_grabber-2] [INFO] [1776548990.707739345] [image_grabber]: ✅ ImageGrabber ready.
+[image_grabber-2]    Resolution : 3840x2160
+[image_grabber-2]    Sensor FPS : 17
+[image_grabber-2]    Publish Hz : 17.0
+[image_grabber-2]    QoS        : BEST_EFFORT depth=1
+[image_grabber-2]    Timelapse  : True (every 1.0s → /home/nds2/camera_captures_calibrated)
+[mission_logger-4] [INFO] [1776548992.075621158] [mission_logger]: 🛸 Pose — pos: (4.96, 1.66, -1.90) m  rpy: (0.3°, 0.3°, 84.2°)
+[mission_logger-4] [INFO] [1776548992.126062135] [mission_logger]: ✅ Home position locked!
+[mission_logger-4]    lat=40.4160911  lon=-86.9291041  alt=182.37 m MSL
+[mission_logger-4] [INFO] [1776548992.883897891] [mission_logger]: ✅ Camera info received.
+[mission_logger-4]    fx=1906.99  fy=2213.04
+[mission_logger-4]    cx=1855.07  cy=1026.42
+[mission_logger-4] [INFO] [1776548993.093550122] [mission_logger]: 🛸 Pose — pos: (5.00, 1.58, -1.86) m  rpy: (0.3°, 0.3°, 84.2°)
+[mission_logger-4] [INFO] [1776548993.205025585] [mission_logger]: ✅ All systems ready — GPS logging is ACTIVE.
+[mission_logger-4] [INFO] [1776548994.270663066] [mission_logger]: 🛸 Pose — pos: (5.05, 1.48, -1.76) m  rpy: (0.3°, 0.3°, 84.2°)
+[mission_logger-4] [INFO] [1776548995.126777480] [mission_logger]: 💾 Continuous save: frame_000001_1776548994_923339847.jpg (frame #1)
+[mission_logger-4] [INFO] [1776548995.274578711] [mission_logger]: 🛸 Pose — pos: (5.10, 1.40, -1.79) m  rpy: (0.3°, 0.3°, 84.2°)
+[image_grabber-2] [INFO] [1776548995.744628239] [image_grabber]: 📡 ImageGrabber — published 24 frames total | actual rate: 4.8 Hz | read failures: 0
+[mission_logger-4] [INFO] [1776548996.296516166] [mission_logger]: 💾 Continuous save: frame_000002_1776548996_28418554.jpg (frame #2)
+[mission_logger-4] [INFO] [1776548996.329004123] [mission_logger]: 🛸 Pose — pos: (5.14, 1.36, -1.85) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776548996.838958092] [yolo_node]: 🧠 Loading YOLO model: /home/nds2/dev/CUASC_2026/install/vision_pipeline/share/vision_pipeline/models/yolo26n_v1.0.engine
+[yolo_node-3] [INFO] [1776548996.846114406] [yolo_node]: ✅ Model loaded successfully!
+[yolo_node-3] [INFO] [1776548997.038394050] [yolo_node]: 🔍 YoloNode ready.
+[yolo_node-3]    conf_threshold : 0.5
+[yolo_node-3]    iou_threshold  : 0.5
+[yolo_node-3]    slice_size     : 1280
+[yolo_node-3]    overlap_ratio  : 0.2
+[mission_logger-4] [INFO] [1776548997.374814567] [mission_logger]: 💾 Continuous save: frame_000003_1776548997_96520887.jpg (frame #3)
+[mission_logger-4] [INFO] [1776548997.399115958] [mission_logger]: 🛸 Pose — pos: (5.20, 1.29, -1.80) m  rpy: (0.3°, 0.3°, 84.2°)
+[yolo_node-3] [INFO] [1776548997.955681717] [yolo_node]: [Frame 1] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] Loading /home/nds2/dev/CUASC_2026/install/vision_pipeline/share/vision_pipeline/models/yolo26n_v1.0.engine for TensorRT inference...
+[yolo_node-3] [04/18/2026-17:49:58] [TRT] [I] Loaded engine size: 8 MiB
+[yolo_node-3] [04/18/2026-17:49:58] [TRT] [W] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[yolo_node-3] [04/18/2026-17:49:58] [TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: CPU +0, GPU +44, now: CPU 0, GPU 48 (MiB)
+[mission_logger-4] [INFO] [1776548998.477418089] [mission_logger]: 🛸 Pose — pos: (5.26, 1.25, -1.77) m  rpy: (0.3°, 0.3°, 84.2°)
+[mission_logger-4] [INFO] [1776548998.802339524] [mission_logger]: 💾 Continuous save: frame_000004_1776548998_608554224.jpg (frame #4)
+[yolo_node-3] [INFO] [1776548998.993078451] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (1024.8 ms)
+[yolo_node-3] [INFO] [1776548999.058845417] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (61.7 ms)
+[yolo_node-3] [INFO] [1776548999.121142517] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (57.7 ms)
+[yolo_node-3] [INFO] [1776548999.196148799] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (70.2 ms)
+[yolo_node-3] [INFO] [1776548999.266579856] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (65.2 ms)
+[yolo_node-3] [INFO] [1776548999.328566359] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (57.7 ms)
+[yolo_node-3] [INFO] [1776548999.389421648] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (55.9 ms)
+[yolo_node-3] [INFO] [1776548999.490205917] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (96.8 ms)
+[yolo_node-3] [INFO] [1776548999.491635663] [yolo_node]: [Frame 1] ⏭️  No detections after NMS (total time: 1554.1 ms)
+[yolo_node-3] [INFO] [1776548999.634530410] [yolo_node]: [Frame 2] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[mission_logger-4] [INFO] [1776548999.673194830] [mission_logger]: 🛸 Pose — pos: (5.32, 1.24, -1.82) m  rpy: (0.3°, 0.3°, 84.2°)
+[yolo_node-3] [INFO] [1776548999.689037588] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (52.1 ms)
+[yolo_node-3] [INFO] [1776548999.726569833] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (32.5 ms)
+[yolo_node-3] [INFO] [1776548999.769919720] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (40.3 ms)
+[yolo_node-3] [INFO] [1776548999.822601850] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (51.1 ms)
+[yolo_node-3] [INFO] [1776548999.878223602] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (50.2 ms)
+[yolo_node-3] [INFO] [1776548999.940338715] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (54.5 ms)
+[yolo_node-3] [INFO] [1776549000.001232853] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (58.0 ms)
+[yolo_node-3] [INFO] [1776549000.069556108] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (66.7 ms)
+[yolo_node-3] [INFO] [1776549000.070642778] [yolo_node]: [Frame 2] ⏭️  No detections after NMS (total time: 456.7 ms)
+[yolo_node-3] [INFO] [1776549000.171657067] [yolo_node]: [Frame 3] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549000.247599650] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (74.5 ms)
+[mission_logger-4] [INFO] [1776549000.250340325] [mission_logger]: 💾 Continuous save: frame_000005_1776548999_949954835.jpg (frame #5)
+[yolo_node-3] [INFO] [1776549000.294238538] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (44.9 ms)
+[yolo_node-3] [INFO] [1776549000.340216842] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (42.8 ms)
+[yolo_node-3] [INFO] [1776549000.397123379] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (53.9 ms)
+[yolo_node-3] [INFO] [1776549000.458189872] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (57.9 ms)
+[yolo_node-3] [INFO] [1776549000.501692112] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (39.8 ms)
+[yolo_node-3] [INFO] [1776549000.545205617] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (40.9 ms)
+[yolo_node-3] [INFO] [1776549000.613234661] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (66.0 ms)
+[yolo_node-3] [INFO] [1776549000.615021788] [yolo_node]: [Frame 3] ⏭️  No detections after NMS (total time: 451.8 ms)
+[mission_logger-4] [INFO] [1776549000.618880076] [mission_logger]: 🔗 Sync callback #1 — 0 detection(s) in this frame
+[mission_logger-4] [INFO] [1776549000.677711053] [mission_logger]: 🛸 Pose — pos: (5.33, 1.24, -1.85) m  rpy: (0.2°, 0.3°, 84.2°)
+[yolo_node-3] [INFO] [1776549000.707564963] [yolo_node]: [Frame 4] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549000.766274850] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (57.1 ms)
+[yolo_node-3] [INFO] [1776549000.821130865] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (52.9 ms)
+[yolo_node-3] [INFO] [1776549000.864911765] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (41.6 ms)
+[yolo_node-3] [INFO] [1776549000.912395016] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (45.5 ms)
+[image_grabber-2] [INFO] [1776549000.952386365] [image_grabber]: 📡 ImageGrabber — published 49 frames total | actual rate: 4.8 Hz | read failures: 0
+[yolo_node-3] [INFO] [1776549000.958218822] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (42.8 ms)
+[yolo_node-3] [INFO] [1776549001.010437012] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (48.1 ms)
+[yolo_node-3] [INFO] [1776549001.067584193] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (54.5 ms)
+[yolo_node-3] [INFO] [1776549001.155851060] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (86.5 ms)
+[yolo_node-3] [INFO] [1776549001.158249906] [yolo_node]: [Frame 4] ⏭️  No detections after NMS (total time: 459.5 ms)
+[yolo_node-3] [INFO] [1776549001.659290077] [yolo_node]: [Frame 5] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549001.720953026] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (57.7 ms)
+[mission_logger-4] [INFO] [1776549001.731055233] [mission_logger]: 🛸 Pose — pos: (5.29, 1.22, -1.88) m  rpy: (0.2°, 0.3°, 84.2°)
+[yolo_node-3] [INFO] [1776549001.763624761] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (39.8 ms)
+[yolo_node-3] [INFO] [1776549001.813371497] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (45.7 ms)
+[yolo_node-3] [INFO] [1776549001.877024743] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (60.9 ms)
+[yolo_node-3] [INFO] [1776549001.947705085] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (68.4 ms)
+[yolo_node-3] [INFO] [1776549001.999600776] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (50.3 ms)
+[yolo_node-3] [INFO] [1776549002.034431037] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (32.1 ms)
+[yolo_node-3] [INFO] [1776549002.084396305] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (48.4 ms)
+[yolo_node-3] [INFO] [1776549002.085561087] [yolo_node]: [Frame 5] ⏭️  No detections after NMS (total time: 435.2 ms)
+[mission_logger-4] [INFO] [1776549002.419711811] [mission_logger]: 💾 Continuous save: frame_000006_1776549002_220541758.jpg (frame #6)
+[mission_logger-4] [INFO] [1776549002.780118736] [mission_logger]: 🛸 Pose — pos: (5.24, 1.21, -1.93) m  rpy: (0.2°, 0.2°, 84.2°)
+[mission_logger-4] [INFO] [1776549003.823861325] [mission_logger]: 🛸 Pose — pos: (5.20, 1.18, -1.84) m  rpy: (0.2°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549003.955303905] [yolo_node]: [Frame 6] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549004.010235348] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (53.6 ms)
+[yolo_node-3] [INFO] [1776549004.079234104] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (61.4 ms)
+[mission_logger-4] [INFO] [1776549004.101835125] [mission_logger]: 💾 Continuous save: frame_000007_1776549003_885726710.jpg (frame #7)
+[yolo_node-3] [INFO] [1776549004.141116835] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (59.9 ms)
+[yolo_node-3] [INFO] [1776549004.184906378] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (40.7 ms)
+[yolo_node-3] [INFO] [1776549004.237853604] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (51.3 ms)
+[yolo_node-3] [INFO] [1776549004.301671144] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (61.8 ms)
+[yolo_node-3] [INFO] [1776549004.347604298] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (44.3 ms)
+[yolo_node-3] [INFO] [1776549004.457208557] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (107.7 ms)
+[yolo_node-3] [INFO] [1776549004.458616223] [yolo_node]: [Frame 6] ⏭️  No detections after NMS (total time: 514.7 ms)
+[mission_logger-4] [INFO] [1776549004.462481423] [mission_logger]: 🔗 Sync callback #2 — 0 detection(s) in this frame
+[yolo_node-3] [INFO] [1776549004.559213297] [yolo_node]: [Frame 7] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549004.630361872] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (67.3 ms)
+[yolo_node-3] [INFO] [1776549004.685089697] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (53.0 ms)
+[yolo_node-3] [INFO] [1776549004.742183408] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (55.2 ms)
+[yolo_node-3] [INFO] [1776549004.785355695] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (40.5 ms)
+[mission_logger-4] [INFO] [1776549004.825196133] [mission_logger]: 🛸 Pose — pos: (5.15, 1.16, -1.77) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549004.830292485] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (42.8 ms)
+[yolo_node-3] [INFO] [1776549004.876565355] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (44.7 ms)
+[yolo_node-3] [INFO] [1776549004.933430391] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (55.2 ms)
+[yolo_node-3] [INFO] [1776549005.026743213] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (90.4 ms)
+[yolo_node-3] [INFO] [1776549005.028487171] [yolo_node]: [Frame 7] ⏭️  No detections after NMS (total time: 478.0 ms)
+[yolo_node-3] [INFO] [1776549005.148549900] [yolo_node]: [Frame 8] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549005.217252462] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (67.3 ms)
+[yolo_node-3] [INFO] [1776549005.275328394] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (53.4 ms)
+[yolo_node-3] [INFO] [1776549005.332105749] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (55.2 ms)
+[yolo_node-3] [INFO] [1776549005.383603006] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (50.0 ms)
+[yolo_node-3] [INFO] [1776549005.418673048] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (33.5 ms)
+[yolo_node-3] [INFO] [1776549005.458224650] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (38.1 ms)
+[yolo_node-3] [INFO] [1776549005.503033535] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (43.0 ms)
+[yolo_node-3] [INFO] [1776549005.579188575] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (74.5 ms)
+[yolo_node-3] [INFO] [1776549005.580314509] [yolo_node]: [Frame 8] ⏭️  No detections after NMS (total time: 446.1 ms)
+[mission_logger-4] [INFO] [1776549005.584186910] [mission_logger]: 🔗 Sync callback #3 — 0 detection(s) in this frame
+[mission_logger-4] [INFO] [1776549005.828553733] [mission_logger]: 🛸 Pose — pos: (5.06, 1.18, -1.72) m  rpy: (0.3°, 0.2°, 84.2°)
+[image_grabber-2] [INFO] [1776549005.991406057] [image_grabber]: 📡 ImageGrabber — published 76 frames total | actual rate: 5.4 Hz | read failures: 0
+[mission_logger-4] [INFO] [1776549006.346130755] [mission_logger]: 💾 Continuous save: frame_000008_1776549006_102055516.jpg (frame #8)
+[yolo_node-3] [INFO] [1776549006.626557909] [yolo_node]: [Frame 9] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549006.692196049] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (64.3 ms)
+[yolo_node-3] [INFO] [1776549006.732379948] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (38.5 ms)
+[yolo_node-3] [INFO] [1776549006.773212975] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (39.0 ms)
+[yolo_node-3] [INFO] [1776549006.835313855] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (57.7 ms)
+[yolo_node-3] [INFO] [1776549006.869865170] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (33.0 ms)
+[mission_logger-4] [INFO] [1776549006.874971891] [mission_logger]: 🛸 Pose — pos: (5.01, 1.19, -1.68) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549006.909824426] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (38.4 ms)
+[yolo_node-3] [INFO] [1776549006.963809588] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (51.9 ms)
+[yolo_node-3] [INFO] [1776549007.058161883] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (92.5 ms)
+[yolo_node-3] [INFO] [1776549007.059266409] [yolo_node]: [Frame 9] ⏭️  No detections after NMS (total time: 441.4 ms)
+[mission_logger-4] [INFO] [1776549007.063646496] [mission_logger]: 🔗 Sync callback #4 — 0 detection(s) in this frame
+[mission_logger-4] [INFO] [1776549007.876403705] [mission_logger]: 🛸 Pose — pos: (4.98, 1.21, -1.67) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549007.934389077] [yolo_node]: [Frame 10] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549007.989816049] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (54.1 ms)
+[yolo_node-3] [INFO] [1776549008.032592942] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (41.3 ms)
+[yolo_node-3] [INFO] [1776549008.083481489] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (49.3 ms)
+[yolo_node-3] [INFO] [1776549008.144980058] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (59.7 ms)
+[yolo_node-3] [INFO] [1776549008.182321043] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (35.7 ms)
+[yolo_node-3] [INFO] [1776549008.221491650] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (37.5 ms)
+[yolo_node-3] [INFO] [1776549008.278462738] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (55.4 ms)
+[yolo_node-3] [INFO] [1776549008.332277627] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (52.2 ms)
+[yolo_node-3] [INFO] [1776549008.335051390] [yolo_node]: [Frame 10] ⏭️  No detections after NMS (total time: 420.4 ms)
+[yolo_node-3] [INFO] [1776549008.337699327] [yolo_node]: 📊 YoloNode stats — frames received: 10 | frames with detections: 0 | total detections: 0 | actual Hz: 0.9
+[mission_logger-4] [INFO] [1776549008.503966357] [mission_logger]: 💾 Continuous save: frame_000009_1776549008_217204588.jpg (frame #9)
+[mission_logger-4] [INFO] [1776549008.519761853] [mission_logger]: 🔗 Sync callback #5 — 0 detection(s) in this frame
+[yolo_node-3] [INFO] [1776549008.799521102] [yolo_node]: [Frame 11] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549008.857879536] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (57.0 ms)
+[yolo_node-3] [INFO] [1776549008.920340038] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (60.8 ms)
+[mission_logger-4] [INFO] [1776549008.927436704] [mission_logger]: 🛸 Pose — pos: (4.95, 1.22, -1.69) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549008.991585963] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (68.2 ms)
+[yolo_node-3] [INFO] [1776549009.059470438] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (66.4 ms)
+[yolo_node-3] [INFO] [1776549009.099798084] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (37.8 ms)
+[yolo_node-3] [INFO] [1776549009.144539706] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (43.0 ms)
+[yolo_node-3] [INFO] [1776549009.218504067] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (72.3 ms)
+[yolo_node-3] [INFO] [1776549009.297847023] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (74.6 ms)
+[yolo_node-3] [INFO] [1776549009.299106207] [yolo_node]: [Frame 11] ⏭️  No detections after NMS (total time: 509.5 ms)
+[mission_logger-4] [INFO] [1776549010.037871430] [mission_logger]: 💾 Continuous save: frame_000010_1776549009_817045755.jpg (frame #10)
+[yolo_node-3] [INFO] [1776549010.055785225] [yolo_node]: [Frame 12] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[mission_logger-4] [INFO] [1776549010.081746354] [mission_logger]: 🛸 Pose — pos: (4.96, 1.22, -1.76) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549010.111630285] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (54.6 ms)
+[yolo_node-3] [INFO] [1776549010.182382221] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (69.3 ms)
+[yolo_node-3] [INFO] [1776549010.249407775] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (62.5 ms)
+[yolo_node-3] [INFO] [1776549010.325176159] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (70.8 ms)
+[yolo_node-3] [INFO] [1776549010.359569715] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (32.8 ms)
+[yolo_node-3] [INFO] [1776549010.406952299] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (45.8 ms)
+[yolo_node-3] [INFO] [1776549010.461639040] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (53.2 ms)
+[yolo_node-3] [INFO] [1776549010.542882373] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (79.7 ms)
+[yolo_node-3] [INFO] [1776549010.544011092] [yolo_node]: [Frame 12] ⏭️  No detections after NMS (total time: 497.7 ms)
+[mission_logger-4] [INFO] [1776549010.547433919] [mission_logger]: 🔗 Sync callback #6 — 0 detection(s) in this frame
+[yolo_node-3] [INFO] [1776549010.627615415] [yolo_node]: [Frame 13] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549010.686564834] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (57.6 ms)
+[yolo_node-3] [INFO] [1776549010.724691845] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (36.4 ms)
+[yolo_node-3] [INFO] [1776549010.765699181] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (38.5 ms)
+[yolo_node-3] [INFO] [1776549010.815297953] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (47.9 ms)
+[yolo_node-3] [INFO] [1776549010.852298390] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (35.0 ms)
+[yolo_node-3] [INFO] [1776549010.906969547] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (50.1 ms)
+[yolo_node-3] [INFO] [1776549010.964225536] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (54.9 ms)
+[yolo_node-3] [INFO] [1776549011.040225252] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (73.4 ms)
+[yolo_node-3] [INFO] [1776549011.041629718] [yolo_node]: [Frame 13] ⏭️  No detections after NMS (total time: 426.9 ms)
+[image_grabber-2] [INFO] [1776549011.049880414] [image_grabber]: 📡 ImageGrabber — published 102 frames total | actual rate: 5.1 Hz | read failures: 0
+[mission_logger-4] [INFO] [1776549011.095915718] [mission_logger]: 🛸 Pose — pos: (4.98, 1.20, -1.90) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549011.283401904] [yolo_node]: [Frame 14] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549011.353449993] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (68.7 ms)
+[yolo_node-3] [INFO] [1776549011.408381634] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (53.4 ms)
+[mission_logger-4] [INFO] [1776549011.458540350] [mission_logger]: 💾 Continuous save: frame_000011_1776549011_185619960.jpg (frame #11)
+[yolo_node-3] [INFO] [1776549011.463384380] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (53.4 ms)
+[yolo_node-3] [INFO] [1776549011.506531807] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (41.5 ms)
+[yolo_node-3] [INFO] [1776549011.559524383] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (51.4 ms)
+[yolo_node-3] [INFO] [1776549011.616152845] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (55.0 ms)
+[yolo_node-3] [INFO] [1776549011.677895325] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (60.1 ms)
+[yolo_node-3] [INFO] [1776549011.750051024] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (70.6 ms)
+[yolo_node-3] [INFO] [1776549011.751150942] [yolo_node]: [Frame 14] ⏭️  No detections after NMS (total time: 477.0 ms)
+[mission_logger-4] [INFO] [1776549011.753897697] [mission_logger]: 🔗 Sync callback #7 — 0 detection(s) in this frame
+[mission_logger-4] [INFO] [1776549012.124367581] [mission_logger]: 🛸 Pose — pos: (4.98, 1.19, -2.06) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549012.485928461] [yolo_node]: [Frame 15] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549012.559040173] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (71.8 ms)
+[yolo_node-3] [INFO] [1776549012.625453816] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (59.4 ms)
+[mission_logger-4] [INFO] [1776549012.630595578] [mission_logger]: 💾 Continuous save: frame_000012_1776549012_382366026.jpg (frame #12)
+[yolo_node-3] [INFO] [1776549012.683101812] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (56.0 ms)
+[yolo_node-3] [INFO] [1776549012.750320554] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (65.6 ms)
+[yolo_node-3] [INFO] [1776549012.812861380] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (60.3 ms)
+[yolo_node-3] [INFO] [1776549012.873255363] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (57.1 ms)
+[yolo_node-3] [INFO] [1776549012.929209609] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (51.8 ms)
+[yolo_node-3] [INFO] [1776549012.986861733] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (54.9 ms)
+[yolo_node-3] [INFO] [1776549012.988040980] [yolo_node]: [Frame 15] ⏭️  No detections after NMS (total time: 550.5 ms)
+[mission_logger-4] [INFO] [1776549012.990806776] [mission_logger]: 🔗 Sync callback #8 — 0 detection(s) in this frame
+[yolo_node-3] [INFO] [1776549013.057122978] [yolo_node]: [Frame 16] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549013.104479900] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (45.9 ms)
+[mission_logger-4] [INFO] [1776549013.127367103] [mission_logger]: 🛸 Pose — pos: (4.98, 1.21, -2.16) m  rpy: (0.3°, 0.2°, 84.2°)
+[yolo_node-3] [INFO] [1776549013.158647341] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (52.1 ms)
+[yolo_node-3] [INFO] [1776549013.221527372] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (60.4 ms)
+[yolo_node-3] [INFO] [1776549013.287467954] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (63.9 ms)
+[yolo_node-3] [INFO] [1776549013.345148047] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (55.9 ms)
+[yolo_node-3] [INFO] [1776549013.390321326] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (43.7 ms)
+[yolo_node-3] [INFO] [1776549013.436895422] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (45.1 ms)
+[yolo_node-3] [INFO] [1776549013.504893790] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (66.3 ms)
+[yolo_node-3] [INFO] [1776549013.506080045] [yolo_node]: [Frame 16] ⏭️  No detections after NMS (total time: 458.1 ms)
+[yolo_node-3] [INFO] [1776549013.570404831] [yolo_node]: [Frame 17] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549013.627764888] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (56.0 ms)
+[yolo_node-3] [INFO] [1776549013.683823392] [yolo_node]:    Slice [02/08] offset=(1024,0) size=1280x1280 → 0 raw detections (54.5 ms)
+[yolo_node-3] [INFO] [1776549013.719443013] [yolo_node]:    Slice [03/08] offset=(2048,0) size=1280x1280 → 0 raw detections (34.0 ms)
+[yolo_node-3] [INFO] [1776549013.762023330] [yolo_node]:    Slice [04/08] offset=(3072,0) size=768x1280 → 0 raw detections (40.5 ms)
+[yolo_node-3] [INFO] [1776549013.825259782] [yolo_node]:    Slice [05/08] offset=(0,1024) size=1280x1136 → 0 raw detections (53.9 ms)
+[yolo_node-3] [INFO] [1776549013.877528094] [yolo_node]:    Slice [06/08] offset=(1024,1024) size=1280x1136 → 0 raw detections (50.2 ms)
+[yolo_node-3] [INFO] [1776549013.920894950] [yolo_node]:    Slice [07/08] offset=(2048,1024) size=1280x1136 → 0 raw detections (41.7 ms)
+[yolo_node-3] [INFO] [1776549013.980139031] [yolo_node]:    Slice [08/08] offset=(3072,1024) size=768x1136 → 0 raw detections (57.3 ms)
+[yolo_node-3] [INFO] [1776549013.981872941] [yolo_node]: [Frame 17] ⏭️  No detections after NMS (total time: 424.2 ms)
+[yolo_node-3] [INFO] [1776549014.062210059] [yolo_node]: [Frame 18] 🖼️  3840x2160 → 8 slices (slice=1280, overlap=0.2)
+[yolo_node-3] [INFO] [1776549014.115393967] [yolo_node]:    Slice [01/08] offset=(0,0) size=1280x1280 → 0 raw detections (51.5 ms)

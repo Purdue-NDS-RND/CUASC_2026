@@ -31,6 +31,7 @@ from mavros_msgs.msg import HomePosition
 from rclpy.node import Node
 from rclpy.qos import (
     HistoryPolicy,
+    QoSDurabilityPolicy,
     QoSProfile,
     ReliabilityPolicy,
     qos_profile_sensor_data,
@@ -125,26 +126,22 @@ class MissionLogger(Node):
         self.create_subscription(
             Image, "/camera/image_raw", self._on_every_frame, qos_profile
         )
-<<<<<<< HEAD
-
-        img_sub = message_filters.Subscriber(
-            self, Image, "/camera/image_raw", qos_profile=qos_profile
-        )
-=======
->>>>>>> b28bae74c743b0c84c627562fefc17c526cedfc1
         self.create_subscription(
             PoseStamped,
             "/mavros/local_position/pose",
             self._on_pose,
             qos_profile_sensor_data,
         )
+        home_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+        )
         self.create_subscription(
-            HomePosition, "/mavros/home_position/home", self._on_home, 10
+            HomePosition, "/mavros/home_position/home", self._on_home, home_qos
         )
 
-<<<<<<< HEAD
-        img_sub = message_filters.Subscriber(self, Image, "/camera/image_raw")
-=======
         # --- The Synchronizer Setup ---
         # Provide the QoS profile so it can hear the Best Effort camera
         img_sub = message_filters.Subscriber(
@@ -152,7 +149,6 @@ class MissionLogger(Node):
         )
 
         # YOLO publishes Reliably, so it does not need a special QoS profile here
->>>>>>> b28bae74c743b0c84c627562fefc17c526cedfc1
         det_sub = message_filters.Subscriber(
             self, Detection2DArray, "/drone_control/detection"
         )
@@ -485,8 +481,8 @@ class MissionLogger(Node):
 
         self.get_logger().info(f"      [Raycast] t={t:.2f} m (ray length to ground)")
 
-        target_x = cam_offset_enu[0] + t * ray_world_enu[0]
-        target_y = cam_offset_enu[1] + t * ray_world_enu[1]
+        target_x = drone_pos.x + cam_offset_enu[0] + t * ray_world_enu[0]
+        target_y = drone_pos.y + cam_offset_enu[1] + t * ray_world_enu[1]
 
         # Step F: metric ENU offset → GPS
         lat0 = self._home.geo.latitude

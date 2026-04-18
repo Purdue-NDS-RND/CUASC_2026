@@ -1,49 +1,49 @@
 mission_sequence:
-  on_failure: abort_and_rtl
+  on_failure: abort_and_rtl                         # Abort the remaining sequence and request RTL on failure.
   missions:
-    - type: takeoff
-      name: takeoff
+    - type: takeoff                                # Mission type registered in the mission framework.
+      name: takeoff                                # Human-readable mission instance name for logs.
       config:
-        target_altitude_m: 15.0
+        target_altitude_m: 15.0                    # Target climb altitude after takeoff in meters.
 
-    - type: package_drop
-      name: package_drop
-      failure_policy: continue_to_next
+    - type: package_drop                           # Vision-guided package-drop mission.
+      name: package_drop                           # Human-readable mission instance name for logs.
+      failure_policy: continue_to_next             # Keep the sequence running after this mission fails.
       config:
         # Offset from the default SITL spawn so fake-drop still exercises transit.
-        target_latitude: -35.3631271
-        target_longitude: 149.1653479
-        transit_altitude_m: 15.0
-        drop_altitude_m: 4.0
-        fake_drop: true
-        descent_rate_mps: 0.35
-        camera_fx_px: 2334.99647
-        camera_fy_px: 2338.06625
-        camera_calibration_width_px: 3840.0
-        camera_calibration_height_px: 2160.0
-        camera_yaw_offset_deg: 0.0
-        centering_tolerance_m: 0.22
-        centering_deadband_m: 0.08
-        tracking_low_pass_alpha: 0.22
-        centering_gain_mps_per_m: 0.35
-        max_centering_speed_mps: 0.60
-        arrival_radius_m: 3.0
-        arrival_alt_tolerance_m: 2.0
-        not_found_ascent_m: 3.0
-        max_recovery_altitude_m: 40.0
-        max_recovery_attempts: 10
-        min_projection_altitude_m: 0.75
-        max_projection_distance_m: 25.0
-        centering_dwell_s: 1.0
-        drop_hover_dwell_s: 8.0
-        servo_channel: 9
-        servo_open_pwm: 1900
-        enable_gimbal_pointing: false
-        gimbal_pitch_deg: -90.0
-        gimbal_yaw_deg: 0.0
-        target_timeout_s: 2.0
+        target_latitude: -35.3631271               # GPS latitude of the drop target.
+        target_longitude: 149.1653479              # GPS longitude of the drop target.
+        transit_altitude_m: 15.0                   # Cruise altitude used while flying to the target area.
+        drop_altitude_m: 4.0                       # Target altitude for the package release.
+        fake_drop: true                            # Simulate payload release without actuating the servo.
+        descent_rate_mps: 0.35                     # Descent speed while centered over the target.
+        camera_fx_px: 2334.99647                   # Camera focal length in pixels along the x-axis.
+        camera_fy_px: 2338.06625                   # Camera focal length in pixels along the y-axis.
+        camera_calibration_width_px: 3840.0        # Image width used when the camera intrinsics were calibrated.
+        camera_calibration_height_px: 2160.0       # Image height used when the camera intrinsics were calibrated.
+        camera_yaw_offset_deg: 0.0                 # Fixed yaw rotation between the camera and vehicle body.
+        centering_tolerance_m: 0.22                # Ground-error threshold considered centered enough to descend.
+        centering_deadband_m: 0.08                 # Small projected errors below this are treated as zero.
+        tracking_low_pass_alpha: 0.22              # Low-pass filter weight; higher values react faster but noisier.
+        centering_gain_mps_per_m: 0.40             # XY velocity gain applied to projected ground error.
+        max_centering_speed_mps: 0.60              # Maximum commanded lateral tracking speed.
+        arrival_radius_m: 3.0                      # Horizontal GPS radius used to declare arrival at the target area.
+        arrival_alt_tolerance_m: 2.0               # Altitude tolerance used when checking target heights.
+        not_found_ascent_m: 3.0                    # Climb amount per retry when the visual target is lost.
+        max_recovery_altitude_m: 40.0              # Hard ceiling for target-recovery climbs.
+        max_recovery_attempts: 10                  # Maximum number of visual reacquisition attempts.
+        min_projection_altitude_m: 0.75            # Minimum altitude where ground projection is considered valid.
+        max_projection_distance_m: 25.0            # Reject projected detections farther than this from the drone.
+        centering_dwell_s: 1.0                     # Time to remain centered before committing to the drop phase.
+        drop_hover_dwell_s: 8.0                    # Hover time at drop altitude before releasing the payload.
+        servo_channel: 9                           # ArduPilot servo output channel used for the payload release.
+        servo_open_pwm: 1900                       # PWM value sent to actuate the payload release servo.
+        enable_gimbal_pointing: false              # If true, command the gimbal toward the configured angles.
+        gimbal_pitch_deg: -90.0                    # Desired gimbal pitch angle in degrees.
+        gimbal_yaw_deg: 0.0                        # Desired gimbal yaw angle in degrees.
+        target_timeout_s: 2.0                      # Detection freshness timeout before the target is considered lost.
 
-    - type: rtl
-      name: rtl
+    - type: rtl                                    # Return-to-launch mission.
+      name: rtl                                    # Human-readable mission instance name for logs.
       config:
-        rtl_mode: "RTL"
+        rtl_mode: "RTL"                            # Flight mode string sent to the FCU for return-to-launch.

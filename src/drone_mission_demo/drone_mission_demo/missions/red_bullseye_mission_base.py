@@ -120,6 +120,7 @@ class RedBullseyeMissionBase(BaseMission):
         self._target_cv_enable_requested = False
         self._filtered_tracking_east_m: float | None = None
         self._filtered_tracking_north_m: float | None = None
+        self._last_velocity_log_time: Time | None = None
 
     def _enter_common_mission(self, context: MissionContext) -> None:
         context.clear_all_setpoints()
@@ -260,6 +261,28 @@ class RedBullseyeMissionBase(BaseMission):
     def _reset_tracking_filter(self) -> None:
         self._filtered_tracking_east_m = None
         self._filtered_tracking_north_m = None
+
+    def _log_velocity_command(
+        self,
+        context: MissionContext,
+        *,
+        east_mps: float,
+        north_mps: float,
+        up_mps: float,
+    ) -> None:
+        now = context.now()
+        if self._last_velocity_log_time is not None:
+            elapsed_s = (now - self._last_velocity_log_time).nanoseconds / 1e9
+            if elapsed_s < 1.0:
+                return
+
+        context.logger.info(
+            f"[{self.name}] Velocity command: "
+            f"east={east_mps:.3f} m/s, "
+            f"north={north_mps:.3f} m/s, "
+            f"up={up_mps:.3f} m/s"
+        )
+        self._last_velocity_log_time = now
 
     def _hold_current_position(
         self,

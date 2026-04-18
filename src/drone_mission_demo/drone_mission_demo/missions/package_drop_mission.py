@@ -206,6 +206,12 @@ class PackageDropMission(RedBullseyeMissionBase):
                 0.0,
                 yaw_deg=HOLD_YAW_DEG,
             )
+            self._log_velocity_command(
+                context,
+                east_mps=0.0,
+                north_mps=0.0,
+                up_mps=0.0,
+            )
             if self._target_loss_start is None:
                 self._target_loss_start = context.now()
                 return MissionStatus.RUNNING
@@ -236,6 +242,12 @@ class PackageDropMission(RedBullseyeMissionBase):
             command.velocity_north_mps,
             command.vertical_velocity_mps,
             yaw_deg=HOLD_YAW_DEG,
+        )
+        self._log_velocity_command(
+            context,
+            east_mps=command.velocity_east_mps,
+            north_mps=command.velocity_north_mps,
+            up_mps=command.vertical_velocity_mps,
         )
         return MissionStatus.RUNNING
 
@@ -312,6 +324,7 @@ class PackageDropMission(RedBullseyeMissionBase):
 
         self._centering_dwell_start = None
         self._target_loss_start = None
+        self._last_velocity_log_time = None
         self._reset_tracking_filter()
         if new_state != PackageDropState.TARGET_NOT_FOUND:
             self._recovery_target_altitude = None

@@ -94,10 +94,15 @@ It:
 - flies to the configured GPS drop zone
 - enables `target_cv` on mission entry and disables it on mission exit
 - waits for a stable visual lock from `target_cv`
+- uses centered normalized target offsets from `target_cv` so the XY control law does not depend on camera resolution
 - commands XY correction and vertical descent simultaneously through shared local velocity setpoints
 - bounds target-loss recovery with `max_recovery_altitude_m` and `max_recovery_attempts`
 - supports `fake_drop: true` for simulation-only testing, which still uses GPS transit and vision tracking but skips the real servo actuation step after the normal drop hover
 - can use `failure_policy: continue_to_next` so a failed drop falls through to the next mission in the sequence
+
+Drop-specific vision tuning keys:
+- `centering_tolerance_norm` — centered-error magnitude in normalized image units required before descent/drop transitions
+- `centering_gain_mps_per_norm` — horizontal velocity gain in m/s per normalized error unit
 
 ## `PackageDeliveryMission` Behavior
 
@@ -112,6 +117,7 @@ It:
 - enables `target_cv` on mission entry and disables it on mission exit
 - flies to the configured GPS delivery zone and acquires the visual target
 - performs an armed touch-and-go in `GUIDED` instead of switching to `LAND`
+- keeps visual XY corrections active using centered normalized target offsets, so tracking behavior stays consistent across camera resolutions
 - keeps visual XY corrections active until the vehicle is low and centered
 - freezes the current GPS lat/lon at the handoff height and descends on that fixed column
 - confirms touchdown from `/mavros/extended_state` rather than guessing from altitude stall
@@ -132,6 +138,8 @@ Delivery-specific config keys:
 - `touchdown_dwell_s` — landed-state debounce before the mission accepts touchdown
 - `delivery_dwell_s` — time to remain on the ground before relaunch
 - `relaunch_altitude_m` — altitude to climb back to after delivery
+- `centering_tolerance_norm` — centered-error magnitude in normalized image units required before descent continues
+- `centering_gain_mps_per_norm` — horizontal velocity gain in m/s per normalized error unit
 - `guided_relaunch_rate_mps` — positive climb-rate request used to lift off from the ground in `GUIDED`
 - `guided_relaunch_max_climb_rate_mps` — max climb rate used to map the relaunch request onto ArduPilot's `SET_ATTITUDE_TARGET` thrust field
 - `final_descent_rate_mps` — slower final descent rate near touchdown

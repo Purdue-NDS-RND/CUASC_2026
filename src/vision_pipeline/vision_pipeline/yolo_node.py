@@ -7,6 +7,7 @@ publishes the bounding boxes to the drone control pipeline.
 """
 
 import os
+import time
 
 import cv2
 import numpy as np
@@ -15,6 +16,7 @@ import torch
 from ament_index_python.packages import get_package_share_directory
 from cv_bridge import CvBridge
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
 from torchvision.ops import nms
 from ultralytics import YOLO
@@ -25,7 +27,6 @@ class YoloNode(Node):
     def __init__(self) -> None:
         super().__init__("yolo_node")
 
-        # Parameters for inference and slicing
         self.declare_parameter("model_path", "yolo26n_v1.0.engine")
         self.declare_parameter("conf_threshold", 0.50)
         self.declare_parameter("iou_threshold", 0.50)
@@ -33,43 +34,50 @@ class YoloNode(Node):
         self.declare_parameter("overlap_ratio", 0.2)
         self.declare_parameter("publish_debug_image", True)
 
-        # Resolve the full path to the model inside the package's share directory
         model_filename = (
             self.get_parameter("model_path").get_parameter_value().string_value
         )
         package_share_dir = get_package_share_directory("vision_pipeline")
         full_model_path = os.path.join(package_share_dir, "models", model_filename)
 
-        # Load the YOLO model ONCE using the resolved path
-        self.get_logger().info(f"Loading YOLO model from: {full_model_path} ...")
+        self.get_logger().info(f"🧠 Loading YOLO model: {full_model_path}")
         self._model = YOLO(full_model_path, task="detect")
         self.get_logger().info("✅ Model loaded successfully!")
 
         self._cv_bridge = CvBridge()
 
-        # ---------------------------------------------------------
-        # SUBSCRIBER: Listens for images from ImageGrabber
-        # ---------------------------------------------------------
-        self.create_subscription(
-            Image,
-            "/camera/image_raw",
-            self._image_callback,
-            10,
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
         )
 
-        # ---------------------------------------------------------
-        # PUBLISHERS
-        # BUG FIX: was declared as Detection2D (singular) but we
-        # publish a Detection2DArray. Mismatched types silently
-        # drop all messages at the subscriber end.
-        # ---------------------------------------------------------
+        self.create_subscription(
+            Image, "/camera/image_raw", self._image_callback, qos_profile
+        )
+
         self._detection_pub = self.create_publisher(
             Detection2DArray, "/drone_control/detection", 10
         )
-
-        # Optional: draw bounding boxes for viewing in RViz / rqt_image_view
         self._debug_img_pub = self.create_publisher(
             Image, "/vision_pipeline/debug_image", 10
+        )
+
+        # ------------------------------------------------------------------
+        # Verbose diagnostics state
+        # ------------------------------------------------------------------
+        self._frames_received = 0
+        self._frames_with_hits = 0
+        self._total_detections = 0
+        self._last_hz_time = time.time()
+        self._frames_since_hz = 0
+
+        self.get_logger().info(
+            f"🔍 YoloNode ready.\n"
+            f"   conf_threshold : {self.get_parameter('conf_threshold').get_parameter_value().double_value}\n"
+            f"   iou_threshold  : {self.get_parameter('iou_threshold').get_parameter_value().double_value}\n"
+            f"   slice_size     : {self.get_parameter('slice_size').get_parameter_value().integer_value}\n"
+            f"   overlap_ratio  : {self.get_parameter('overlap_ratio').get_parameter_value().double_value}"
         )
 
     # ------------------------------------------------------------------
@@ -77,8 +85,6 @@ class YoloNode(Node):
     # ------------------------------------------------------------------
 
     def _slice_image(self, image, slice_size, overlap_ratio):
-        """Slice image into overlapping tiles so small objects near tile
-        borders are not missed."""
         h, w = image.shape[:2]
         slices = []
         step = int(slice_size * (1 - overlap_ratio))
@@ -96,11 +102,10 @@ class YoloNode(Node):
         return slices
 
     # ------------------------------------------------------------------
-    # Non-Maximum Suppression
+    # NMS
     # ------------------------------------------------------------------
 
     def _apply_nms(self, all_boxes, iou_threshold):
-        """Remove duplicate detections that span tile boundaries."""
         if len(all_boxes) == 0:
             return []
 
@@ -111,7 +116,6 @@ class YoloNode(Node):
         scores_tensor = torch.tensor(
             [b["conf"] for b in all_boxes], dtype=torch.float32
         )
-
         keep_indices = nms(boxes_tensor, scores_tensor, iou_threshold)
         return [all_boxes[i] for i in keep_indices.tolist()]
 
@@ -120,11 +124,14 @@ class YoloNode(Node):
     # ------------------------------------------------------------------
 
     def _image_callback(self, msg: Image) -> None:
-        """Runs every time a new image arrives from the camera."""
+        t_start = time.time()
+
+        self._frames_received += 1
+        self._frames_since_hz += 1
 
         frame = self._cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        h, w = frame.shape[:2]
 
-        # Read parameters dynamically so they can be tuned at runtime
         conf_thresh = (
             self.get_parameter("conf_threshold").get_parameter_value().double_value
         )
@@ -136,37 +143,87 @@ class YoloNode(Node):
         )
         overlap = self.get_parameter("overlap_ratio").get_parameter_value().double_value
 
-        # Slice → infer → collect raw detections
         slices = self._slice_image(frame, slice_size, overlap)
         all_boxes = []
 
-        for slice_img, offset_x, offset_y in slices:
+        self.get_logger().info(
+            f"[Frame {self._frames_received}] "
+            f"🖼️  {w}x{h} → {len(slices)} slices "
+            f"(slice={slice_size}, overlap={overlap})"
+        )
+
+        # Run inference on each slice and log per-slice results
+        for slice_idx, (slice_img, offset_x, offset_y) in enumerate(slices):
+            t_infer = time.time()
             results = self._model(slice_img, conf=conf_thresh, verbose=False)
+            infer_ms = (time.time() - t_infer) * 1000
+
+            n_raw = len(results[0].boxes)
+            self.get_logger().info(
+                f"   Slice [{slice_idx + 1:02d}/{len(slices):02d}] "
+                f"offset=({offset_x},{offset_y}) "
+                f"size={slice_img.shape[1]}x{slice_img.shape[0]} "
+                f"→ {n_raw} raw detections ({infer_ms:.1f} ms)"
+            )
 
             for box in results[0].boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = float(box.conf[0].cpu().numpy())
+                cls = int(box.cls[0].cpu().numpy())
                 all_boxes.append(
                     {
                         "x1": float(x1) + offset_x,
                         "y1": float(y1) + offset_y,
                         "x2": float(x2) + offset_x,
                         "y2": float(y2) + offset_y,
-                        "conf": float(box.conf[0].cpu().numpy()),
-                        "cls": int(box.cls[0].cpu().numpy()),
+                        "conf": conf,
+                        "cls": cls,
                     }
                 )
+                self.get_logger().info(
+                    f"      ↳ raw box: class={cls} conf={conf:.3f} "
+                    f"bbox=({x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f}) "
+                    f"full-img=({float(x1) + offset_x:.0f},"
+                    f"{float(y1) + offset_y:.0f},"
+                    f"{float(x2) + offset_x:.0f},"
+                    f"{float(y2) + offset_y:.0f})"
+                )
 
-        # Remove cross-tile duplicates
+        # NMS across all slices
         final_boxes = self._apply_nms(all_boxes, iou_thresh)
+        t_total_ms = (time.time() - t_start) * 1000
 
-        # Pack into a Detection2DArray and publish once per frame
+        if len(all_boxes) > 0:
+            self.get_logger().info(
+                f"   NMS: {len(all_boxes)} raw → {len(final_boxes)} after "
+                f"(iou_thresh={iou_thresh})"
+            )
+
+        if len(final_boxes) == 0:
+            self.get_logger().info(
+                f"[Frame {self._frames_received}] ⏭️  No detections after NMS "
+                f"(total time: {t_total_ms:.1f} ms)"
+            )
+        else:
+            self._frames_with_hits += 1
+            self._total_detections += len(final_boxes)
+            for i, box in enumerate(final_boxes):
+                self.get_logger().info(
+                    f"[Frame {self._frames_received}] "
+                    f"✅ Detection {i + 1}/{len(final_boxes)}: "
+                    f"class={box['cls']} conf={box['conf']:.3f} "
+                    f"center=({box['x1'] + (box['x2'] - box['x1']) / 2:.0f},"
+                    f"{box['y1'] + (box['y2'] - box['y1']) / 2:.0f}) "
+                    f"size={box['x2'] - box['x1']:.0f}x{box['y2'] - box['y1']:.0f}"
+                )
+
+        # Pack and publish Detection2DArray
         det_array_msg = Detection2DArray()
         det_array_msg.header.stamp = msg.header.stamp
         det_array_msg.header.frame_id = msg.header.frame_id
 
         for box in final_boxes:
             det_msg = Detection2D()
-
             width = box["x2"] - box["x1"]
             height = box["y2"] - box["y1"]
             det_msg.bbox.center.position.x = box["x1"] + (width / 2.0)
@@ -178,12 +235,25 @@ class YoloNode(Node):
             result.hypothesis.class_id = str(box["cls"])
             result.hypothesis.score = box["conf"]
             det_msg.results.append(result)
-
             det_array_msg.detections.append(det_msg)
 
         self._detection_pub.publish(det_array_msg)
 
-        # Optional live debug view
+        # Log actual inference rate every 10 frames
+        if self._frames_received % 10 == 0:
+            elapsed = time.time() - self._last_hz_time
+            actual_hz = self._frames_since_hz / elapsed if elapsed > 0 else 0
+            self.get_logger().info(
+                f"📊 YoloNode stats — "
+                f"frames received: {self._frames_received} | "
+                f"frames with detections: {self._frames_with_hits} | "
+                f"total detections: {self._total_detections} | "
+                f"actual Hz: {actual_hz:.1f}"
+            )
+            self._frames_since_hz = 0
+            self._last_hz_time = time.time()
+
+        # Optional debug image
         if self.get_parameter("publish_debug_image").get_parameter_value().bool_value:
             debug_frame = frame.copy()
             for box in final_boxes:
@@ -204,7 +274,6 @@ class YoloNode(Node):
                     (0, 255, 0),
                     2,
                 )
-
             debug_msg = self._cv_bridge.cv2_to_imgmsg(debug_frame, encoding="bgr8")
             self._debug_img_pub.publish(debug_msg)
 

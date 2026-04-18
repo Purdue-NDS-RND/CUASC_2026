@@ -275,6 +275,8 @@ class YoloNode(Node):
                     2,
                 )
             debug_msg = self._cv_bridge.cv2_to_imgmsg(debug_frame, encoding="bgr8")
+            debug_msg.header.stamp = msg.header.stamp
+            debug_msg.header.frame_id = msg.header.frame_id
             self._debug_img_pub.publish(debug_msg)
 
 

@@ -223,7 +223,7 @@ class ImageGrabber(Node):
 
             # --- Timelapse save ---
             if self._enable_timelapse:
-                current_time = time.time()
+                current_time = self.get_clock().now().nanoseconds / 1e9
                 if current_time - self._last_save_time >= self._save_interval:
                     filename = os.path.join(
                         self._save_dir, f"img_{now.sec}_{now.nanosec}.jpg"
@@ -255,11 +255,13 @@ class ImageGrabber(Node):
 def main() -> None:
     rclpy.init()
     node = ImageGrabber()
-    rclpy.spin(node)
-    if hasattr(node, "_camera"):
-        node._camera.release()
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    finally:
+        if hasattr(node, "_camera"):
+            node._camera.release()
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":

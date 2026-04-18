@@ -26,7 +26,7 @@ mission_sequence:
         centering_deadband_m: 0.08                 # Small projected errors below this are treated as zero.
         tracking_low_pass_alpha: 0.22              # Low-pass filter weight; higher values react faster but noisier.
         centering_gain_mps_per_m: 0.40             # XY velocity gain applied to projected ground error.
-        max_centering_speed_mps: 0.60              # Maximum commanded lateral tracking speed.
+        max_centering_speed_mps: 1.0              # Maximum commanded lateral tracking speed.
         arrival_radius_m: 3.0                      # Horizontal GPS radius used to declare arrival at the target area.
         arrival_alt_tolerance_m: 2.0               # Altitude tolerance used when checking target heights.
         not_found_ascent_m: 3.0                    # Climb amount per retry when the visual target is lost.

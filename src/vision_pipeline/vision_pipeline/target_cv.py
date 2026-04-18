@@ -5,7 +5,10 @@ Subscribes to:
   camera/image              (sensor_msgs/Image)   — raw camera frame
 
 Publishes:
-  /drone_package_drop/target_detection  (PointStamped)  — pixel (x, y) of target centre
+  /drone_package_drop/target_detection  (PointStamped)  — centered normalized
+                                                          target offsets in [-1, 1]
+  /drone_package_drop/image_size        (PointStamped)  — raw image width/height
+                                                          for observability/debugging
 
 The detection uses a simple HSV colour filter.  Tune the HSV bounds
 via parameters to match whatever colour your ground target is.
@@ -93,8 +96,11 @@ class TargetCV(Node):
         if not self._enabled:
             return
         if self.last_detection:
-            cx, cy, area = self.last_detection
-            self.get_logger().info(f"Current detection: cx={cx}, cy={cy}, area={area}")
+            x_norm, y_norm, area = self.last_detection
+            self.get_logger().info(
+                f"Current detection: x_norm={x_norm:.3f}, "
+                f"y_norm={y_norm:.3f}, area={area}"
+            )
         else:
             self.get_logger().info("No target detected.")
 
@@ -140,6 +146,7 @@ class TargetCV(Node):
         det = PointStamped()
         det.header.stamp = self.get_clock().now().to_msg()
         det.header.frame_id = "camera"
+        # Keep (-1, -1) as the sentinel for "not found".
         det.point.x = -1.0
         det.point.y = -1.0
         det.point.z = 0.0
@@ -199,6 +206,10 @@ class TargetCV(Node):
 
         return annotated, (center_x, center_y), area
 
+    @staticmethod
+    def _normalize_offset(pixel_value: int, frame_extent: int) -> float:
+        return ((float(pixel_value) / float(frame_extent)) * 2.0) - 1.0
+
     def _on_image(self, msg: Image) -> None:
         if self._image_size != (msg.width, msg.height):
             self._image_size = (msg.width, msg.height)
@@ -231,14 +242,16 @@ class TargetCV(Node):
 
         if center is not None:
             center_x, center_y = center
+            x_norm = self._normalize_offset(center_x, msg.width)
+            y_norm = self._normalize_offset(center_y, msg.height)
             det = PointStamped()
             det.header.stamp = self.get_clock().now().to_msg()
             det.header.frame_id = "camera"
-            det.point.x = float(center_x)
-            det.point.y = float(center_y)
+            det.point.x = x_norm
+            det.point.y = y_norm
             det.point.z = float(area) if area is not None else 0.0
             self._detection_pub.publish(det)
-            self.last_detection = (center_x, center_y, area)
+            self.last_detection = (x_norm, y_norm, area)
         else:
             self.last_detection = None
             self._publish_not_found_detection()

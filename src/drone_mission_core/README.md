@@ -69,8 +69,8 @@ Responsibilities:
 | `/mavros/state` | `mavros_msgs/State` | FCU connection and mode |
 | `/mavros/local_position/pose` | `geometry_msgs/PoseStamped` | Local ENU position feedback |
 | `/mavros/global_position/global` | `sensor_msgs/NavSatFix` | GPS telemetry |
-| `/drone_package_drop/target_detection` | `geometry_msgs/PointStamped` | Vision target center pixel for package-drop missions |
-| `/drone_package_drop/image_size` | `geometry_msgs/PointStamped` | Camera image dimensions for vision-guided missions |
+| `/drone_package_drop/target_detection` | `geometry_msgs/PointStamped` | Center-relative normalized target offsets in `[-1, 1]` for the new vision-guided missions |
+| `/drone_package_drop/image_size` | `geometry_msgs/PointStamped` | Camera image dimensions retained for observability/debugging |
 
 ### Published
 

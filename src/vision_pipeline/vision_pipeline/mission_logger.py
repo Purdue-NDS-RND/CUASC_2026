@@ -69,7 +69,7 @@ class MissionLogger(Node):
         self._last_continuous_save_time = 0.0
 
         self.saved_target_locations: List[Tuple[float, float]] = []
-        self.min_dist_m = 10.0
+        self.min_dist_m = 1.0
 
         self.cv_bridge = CvBridge()
         self.R_EARTH = 6378137.0
@@ -334,7 +334,19 @@ class MissionLogger(Node):
                 continue
 
             # New target — annotate frame and log
-            cv2.circle(frame, (int(u), int(v)), 50, (0, 0, 255), 4)
+            # After — bounding box + center dot
+            bbox_w = det.bbox.size_x
+            bbox_h = det.bbox.size_y
+            x1 = int(u - bbox_w / 2)
+            y1 = int(v - bbox_h / 2)
+            x2 = int(u + bbox_w / 2)
+            y2 = int(v + bbox_h / 2)
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 6)
+            cv2.circle(
+                frame, (int(u), int(v)), 12, (0, 0, 255), -1
+            )  # filled center dot
+
             text = f"Lat: {target_lat:.6f}, Lon: {target_lon:.6f}"
             cv2.putText(
                 frame,
@@ -522,9 +534,14 @@ class MissionLogger(Node):
 def main():
     rclpy.init()
     node = MissionLogger()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass  # Safely catch the Ctrl+C
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

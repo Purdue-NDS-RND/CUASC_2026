@@ -21,6 +21,7 @@ from typing import List, Tuple
 import cv2
 import image_geometry
 import message_filters
+import numpy as np
 import rclpy
 import tf2_ros
 from cv_bridge import CvBridge
@@ -68,14 +69,28 @@ class MissionLogger(Node):
         self.R_EARTH = 6378137.0
         self.camera_model = image_geometry.PinholeCameraModel()
         self.camera_info_received = False
-        self.declare_parameter("ground_altitude_m", 0.0)
-        self.declare_parameter("mount_x", -0.127)
+        # Translation Parameters
+        self.declare_parameter("mount_x", 0.0)
         self.declare_parameter("mount_y", 0.0)
-        self.declare_parameter("mount_z", -0.1524)
-
+        self.declare_parameter("mount_z", 0.0)
+        self.declare_parameter("ground_altitude_m", 0.0)
         self._mount_x = self.get_parameter("mount_x").get_parameter_value().double_value
         self._mount_y = self.get_parameter("mount_y").get_parameter_value().double_value
         self._mount_z = self.get_parameter("mount_z").get_parameter_value().double_value
+
+        # NEW: Rotation Parameters
+        self.declare_parameter("mount_roll", 0.0)
+        self.declare_parameter("mount_pitch", 0.0)
+        self.declare_parameter("mount_yaw", 0.0)
+        self._mount_roll = (
+            self.get_parameter("mount_roll").get_parameter_value().double_value
+        )
+        self._mount_pitch = (
+            self.get_parameter("mount_pitch").get_parameter_value().double_value
+        )
+        self._mount_yaw = (
+            self.get_parameter("mount_yaw").get_parameter_value().double_value
+        )
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -119,7 +134,7 @@ class MissionLogger(Node):
             self, Detection2DArray, "/drone_control/detection"
         )
         self.ts = message_filters.ApproximateTimeSynchronizer(
-            [img_sub, det_sub], queue_size=10, slop=0.05
+            [img_sub, det_sub], queue_size=10, slop=0.5
         )
         self.ts.registerCallback(self._on_synced_data)
 
@@ -270,21 +285,23 @@ class MissionLogger(Node):
             return None
 
         # --- Step A: Pixel to optical ray (same as offline script) ---
-        K = np.array(self.camera_model.intrinsicMatrix())  # 3x3
-        fx, fy = K[0, 0], K[1, 1]
-        cx, cy = K[0, 2], K[1, 2]
+        fx = self.camera_model.fx()
+        fy = self.camera_model.fy()
+        cx = self.camera_model.cx()
+        cy = self.camera_model.cy()
 
         # Undistort the pixel first
         ru, rv = self.camera_model.rectifyPoint((u, v))
         ray_opt = np.array([(ru - cx) / fx, (rv - cy) / fy, 1.0])
         ray_opt /= np.linalg.norm(ray_opt)
 
-        # --- Step B: Optical → NED body (hardcoded nadir assumption,
-        #     matching offline script exactly) ---
+        # --- Step B: Optical → NED body (hardcoded nadir assumption) ---
         ray_body_ned = np.array([-ray_opt[1], ray_opt[0], ray_opt[2]])
 
-        # Apply mount correction (currently 0,0,0 — matches offline config)
-        mount_r = R_scipy.from_euler("xyz", [0.0, 0.0, 0.0], degrees=True)
+        # Apply dynamic mount correction from YAML
+        mount_r = R_scipy.from_euler(
+            "xyz", [self._mount_roll, self._mount_pitch, self._mount_yaw], degrees=True
+        )
         ray_body_ned = mount_r.apply(ray_body_ned)
 
         # --- Step C: NED body → world NED using ArduPilot ZYX convention ---

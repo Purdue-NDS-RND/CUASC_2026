@@ -29,6 +29,16 @@ ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765
 **Settings & Parameters:**
 - ```port:=8765```: Forces the WebSocket to bind to port 8765. To view the data, the remote ground station must connect to ws://<JETSON_IP>:8765.
 
+# **Terminal 3: Updated (Combines 3-5)** 
+
+(This single command now safely launches the URDF Publisher, the Camera, YOLO, and the Logger, reading all offsets and headless settings directly from the YAML).
+
+```bash
+ros2 launch vision_pipeline vision_demo.launch.py
+```
+
+
+<!--
 # **Terminal 3: Physical Geometry Broadcaster (URDF)**
 
 Description: This node reads the physical layout of the drone from the hexacopter.urdf file and broadcasts it to the ROS 2 Transform (TF2) tree. It explicitly defines where the camera (camera_optical_frame) is physically bolted relative to the flight controller (base_link), which is necessary for accurate 3D visualization and spatial math.
@@ -63,4 +73,4 @@ ros2 run vision_pipeline mission_logger --ros-args -p mount_x:=-0.127 -p mount_y
 
 **Settings & Parameters:**
 - ```mount_x, mount_y, mount_z```: Hardcodes the measured physical offset of the camera lens (in meters) relative to the flight controller in the NED (North-East-Down) body frame. This ensures the raycast math relies on ground-truth measurements rather than standard ROS ENU assumptions.
-- ```show_debug_window:=false```: Runs the node in strict "headless" mode. This disables OpenCV from attempting to render a live GUI pop-up window, which prevents the node from crashing when the drone is flying without an HDMI monitor plugged in.
+- ```show_debug_window:=false```: Runs the node in strict "headless" mode. This disables OpenCV from attempting to render a live GUI pop-up window, which prevents the node from crashing when the drone is flying without an HDMI monitor plugged in.-->

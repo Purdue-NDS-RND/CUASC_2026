@@ -1,17 +1,28 @@
 image_grabber:
-  ros__parameters:
-    image_width: 3840
-    image_height: 2160
-    fps: 17
-    shutter_speed: 1000
-    wb_mode: 6
-    image_publishing_rate: 1.0
+    ros__parameters:
+        image_width: 3840
+        image_height: 2160
+        fps: 17
+        shutter_speed: 1000
+        wb_mode: 6
+        image_publishing_rate: 1.0
 
 yolo_node:
-  ros__parameters:
-    model_path: "/models/yolo26n_v1.0.engine"
-    conf_threshold: 0.50
-    iou_threshold: 0.50
-    slice_size: 1280
-    overlap_ratio: 0.2
-    publish_debug_image: true
+    ros__parameters:
+        model_path: "yolo26n_v1.0.engine"
+        conf_threshold: 0.50
+        iou_threshold: 0.50
+        slice_size: 1280
+        overlap_ratio: 0.2
+        publish_debug_image: true
+
+mission_logger:
+    ros__parameters:
+        mount_x: -0.127
+        mount_y: 0.0
+        mount_z: -0.1524
+        mount_roll: 0.0
+        mount_pitch: 0.0
+        mount_yaw: 0.0
+        ground_altitude_m: 0.0
+        show_debug_window: false

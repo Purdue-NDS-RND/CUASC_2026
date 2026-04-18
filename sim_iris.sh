@@ -31,13 +31,10 @@ for arg in "$@"; do
     esac
 done
 
-if [[ -f "install/setup.bash" ]]; then
-    # Prefer the local workspace overlay when it exists.
-    # shellcheck disable=SC1091
-    source install/setup.bash
-fi
-
 echo "Launching iris sim (unlock=${unlock}, rviz=${rviz})"
 ros2 launch ardupilot_gz_bringup iris_runway.launch.py \
     unlock:="${unlock}" \
     rviz:="${rviz}"
+
+sleep 10
+python3 src/drone_utils/drone_utils/sdf_objects.py 

@@ -16,8 +16,8 @@ mission_sequence:
         landing_check_threshold_m: 6.0
         relaunch_altitude_m: 12.0
         fake_drop: true
-        descent_rate_mps: 0.5
-        final_descent_rate_mps: 0.35
+        descent_rate_mps: 0.35
+        final_descent_rate_mps: 0.25
         delivery_dwell_s: 5.0
         guided_relaunch_rate_mps: 0.6
         guided_relaunch_max_climb_rate_mps: 2.5
@@ -26,8 +26,11 @@ mission_sequence:
         camera_calibration_width_px: 3840.0
         camera_calibration_height_px: 2160.0
         camera_yaw_offset_deg: 0.0
-        centering_tolerance_m: 0.35
-        centering_gain_mps_per_m: 0.75
+        centering_tolerance_m: 0.20
+        centering_deadband_m: 0.08
+        tracking_low_pass_alpha: 0.20
+        centering_gain_mps_per_m: 0.30
+        max_centering_speed_mps: 0.50
         arrival_radius_m: 3.0
         arrival_alt_tolerance_m: 2.0
         not_found_ascent_m: 3.0

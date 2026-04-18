@@ -102,6 +102,10 @@ class PackageDeliveryMission(BaseMission):
         self._enable_gimbal_pointing = bool(
             config.get("enable_gimbal_pointing", True)
         )
+        self._centering_deadband_m = float(config.get("centering_deadband_m", 0.08))
+        self._tracking_low_pass_alpha = float(
+            config.get("tracking_low_pass_alpha", 0.25)
+        )
         self._centering_gain_mps_per_m = float(
             config.get("centering_gain_mps_per_m", 0.75)
         )
@@ -152,6 +156,8 @@ class PackageDeliveryMission(BaseMission):
         self._failed = (
             self._target_latitude == 0.0 and self._target_longitude == 0.0
         )
+        self._filtered_tracking_east_m: float | None = None
+        self._filtered_tracking_north_m: float | None = None
 
         context.clear_all_setpoints()
         context.clear_target_tracking_state()
@@ -162,6 +168,7 @@ class PackageDeliveryMission(BaseMission):
             )
 
     def on_exit(self, context: MissionContext) -> None:
+        self._reset_tracking_filter()
         context.clear_all_setpoints()
         context.clear_target_tracking_state()
         if context.target_cv_control_ready():
@@ -322,6 +329,7 @@ class PackageDeliveryMission(BaseMission):
 
         tracking = self._get_tracking_solution(context)
         if tracking is None:
+            self._reset_tracking_filter()
             context.set_local_velocity_setpoint(
                 0.0,
                 0.0,
@@ -578,18 +586,45 @@ class PackageDeliveryMission(BaseMission):
         if projection is None:
             return None
 
+        east_error_m = projection.east_m
+        north_error_m = projection.north_m
+        if abs(east_error_m) <= self._centering_deadband_m:
+            east_error_m = 0.0
+        if abs(north_error_m) <= self._centering_deadband_m:
+            north_error_m = 0.0
+
+        alpha = max(0.0, min(self._tracking_low_pass_alpha, 1.0))
+        if self._filtered_tracking_east_m is None or self._filtered_tracking_north_m is None:
+            self._filtered_tracking_east_m = east_error_m
+            self._filtered_tracking_north_m = north_error_m
+        else:
+            self._filtered_tracking_east_m = self._filtered_tracking_east_m + (
+                alpha * (east_error_m - self._filtered_tracking_east_m)
+            )
+            self._filtered_tracking_north_m = self._filtered_tracking_north_m + (
+                alpha * (north_error_m - self._filtered_tracking_north_m)
+            )
+
+        filtered_error_m = math.hypot(
+            self._filtered_tracking_east_m,
+            self._filtered_tracking_north_m,
+        )
         max_speed = self._max_centering_speed_mps
         if max_centering_speed_mps is not None:
             max_speed = max(0.0, float(max_centering_speed_mps))
 
         velocity_east, velocity_north = ground_offset_to_velocity(
-            east_error_m=projection.east_m,
-            north_error_m=projection.north_m,
+            east_error_m=self._filtered_tracking_east_m,
+            north_error_m=self._filtered_tracking_north_m,
             gain_mps_per_m=self._centering_gain_mps_per_m,
             max_speed_mps=max_speed,
         )
 
-        return projection.horizontal_error_m, velocity_east, velocity_north
+        return filtered_error_m, velocity_east, velocity_north
+
+    def _reset_tracking_filter(self) -> None:
+        self._filtered_tracking_east_m = None
+        self._filtered_tracking_north_m = None
 
     def _has_recent_target_detection(self, context: MissionContext) -> bool:
         detection = context.target_detection
@@ -683,6 +718,7 @@ class PackageDeliveryMission(BaseMission):
 
         self._centering_dwell_start = None
         self._target_loss_start = None
+        self._reset_tracking_filter()
         if new_state != PackageDeliveryState.TARGET_NOT_FOUND:
             self._recovery_target_altitude = None
             self._recovery_hold_position = None

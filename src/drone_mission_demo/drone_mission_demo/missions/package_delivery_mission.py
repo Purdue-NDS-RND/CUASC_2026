@@ -74,8 +74,8 @@ class PackageDeliveryMission(BaseMission):
             config.get("guided_relaunch_max_climb_rate_mps", 2.5)
         )
         self._fake_drop = bool(config.get("fake_drop", False))
-        self._centering_tolerance_px = float(
-            config.get("centering_tolerance_px", 30.0)
+        self._centering_tolerance_norm = float(
+            config.get("centering_tolerance_norm", 0.05)
         )
         self._arrival_radius_m = float(config.get("arrival_radius_m", 3.0))
         self._arrival_alt_tolerance_m = float(
@@ -92,8 +92,8 @@ class PackageDeliveryMission(BaseMission):
         self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
         self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
         self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
-        self._centering_gain_mps_per_px = float(
-            config.get("centering_gain_mps_per_px", 0.02)
+        self._centering_gain_mps_per_norm = float(
+            config.get("centering_gain_mps_per_norm", 1.5)
         )
         self._max_centering_speed_mps = float(
             config.get("max_centering_speed_mps", 2.0)
@@ -310,12 +310,12 @@ class PackageDeliveryMission(BaseMission):
             return MissionStatus.RUNNING
 
         self._target_loss_start = None
-        pixel_error, velocity_east, velocity_north = tracking
+        tracking_error_norm, velocity_east, velocity_north = tracking
         current_altitude = context.local_pose.pose.position.z
         final_descent_start_m = self._landing_check_threshold_m + FINAL_DESCENT_BUFFER_M
 
         vertical_velocity = 0.0
-        if pixel_error <= self._centering_tolerance_px:
+        if tracking_error_norm <= self._centering_tolerance_norm:
             if current_altitude <= self._landing_check_threshold_m:
                 if not context.landing_state_available():
                     context.logger.error(
@@ -520,15 +520,12 @@ class PackageDeliveryMission(BaseMission):
         if detection is None:
             return None
 
-        image_width, image_height = context.image_size or (640, 480)
-        image_cx = image_width / 2.0
-        image_cy = image_height / 2.0
-        error_x = detection.point.x - image_cx
-        error_y = detection.point.y - image_cy
-        pixel_error = math.hypot(error_x, error_y)
+        error_x_norm = detection.point.x
+        error_y_norm = detection.point.y
+        tracking_error_norm = math.hypot(error_x_norm, error_y_norm)
 
-        velocity_east = error_x * self._centering_gain_mps_per_px
-        velocity_north = -error_y * self._centering_gain_mps_per_px
+        velocity_east = error_x_norm * self._centering_gain_mps_per_norm
+        velocity_north = -error_y_norm * self._centering_gain_mps_per_norm
         speed = math.hypot(velocity_east, velocity_north)
         max_speed = (
             self._max_centering_speed_mps
@@ -540,11 +537,13 @@ class PackageDeliveryMission(BaseMission):
             velocity_east *= scale
             velocity_north *= scale
 
-        return pixel_error, velocity_east, velocity_north
+        return tracking_error_norm, velocity_east, velocity_north
 
     def _has_recent_target_detection(self, context: MissionContext) -> bool:
         detection = context.target_detection
-        if detection is None or detection.point.x < 0.0 or detection.point.y < 0.0:
+        if detection is None:
+            return False
+        if detection.point.x == -1.0 and detection.point.y == -1.0:
             return False
 
         detection_time = Time.from_msg(detection.header.stamp)

@@ -53,8 +53,8 @@ class PackageDropMission(BaseMission):
         self._drop_altitude_m = float(config.get("drop_altitude_m", 5.0))
         self._descent_rate_mps = float(config.get("descent_rate_mps", 0.5))
         self._fake_drop = bool(config.get("fake_drop", False))
-        self._centering_tolerance_px = float(
-            config.get("centering_tolerance_px", 30.0)
+        self._centering_tolerance_norm = float(
+            config.get("centering_tolerance_norm", 0.05)
         )
         self._arrival_radius_m = float(config.get("arrival_radius_m", 3.0))
         self._arrival_alt_tolerance_m = float(
@@ -71,8 +71,8 @@ class PackageDropMission(BaseMission):
         self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
         self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
         self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
-        self._centering_gain_mps_per_px = float(
-            config.get("centering_gain_mps_per_px", 0.02)
+        self._centering_gain_mps_per_norm = float(
+            config.get("centering_gain_mps_per_norm", 1.5)
         )
         self._max_centering_speed_mps = float(
             config.get("max_centering_speed_mps", 2.0)
@@ -268,15 +268,12 @@ class PackageDropMission(BaseMission):
 
         self._target_loss_start = None
         detection = context.target_detection
-        image_width, image_height = context.image_size or (640, 480)
-        image_cx = image_width / 2.0
-        image_cy = image_height / 2.0
-        error_x = detection.point.x - image_cx
-        error_y = detection.point.y - image_cy
-        pixel_error = math.hypot(error_x, error_y)
+        error_x_norm = detection.point.x
+        error_y_norm = detection.point.y
+        tracking_error_norm = math.hypot(error_x_norm, error_y_norm)
 
-        velocity_east = error_x * self._centering_gain_mps_per_px
-        velocity_north = -error_y * self._centering_gain_mps_per_px
+        velocity_east = error_x_norm * self._centering_gain_mps_per_norm
+        velocity_north = -error_y_norm * self._centering_gain_mps_per_norm
         speed = math.hypot(velocity_east, velocity_north)
         if speed > self._max_centering_speed_mps and speed > 0.0:
             scale = self._max_centering_speed_mps / speed
@@ -289,7 +286,7 @@ class PackageDropMission(BaseMission):
         at_drop_altitude = altitude_error <= self._arrival_alt_tolerance_m
 
         vertical_velocity = 0.0
-        if pixel_error <= self._centering_tolerance_px:
+        if tracking_error_norm <= self._centering_tolerance_norm:
             if at_drop_altitude:
                 if self._centering_dwell_start is None:
                     self._centering_dwell_start = context.now()
@@ -370,7 +367,9 @@ class PackageDropMission(BaseMission):
 
     def _has_recent_target_detection(self, context: MissionContext) -> bool:
         detection = context.target_detection
-        if detection is None or detection.point.x < 0.0 or detection.point.y < 0.0:
+        if detection is None:
+            return False
+        if detection.point.x == -1.0 and detection.point.y == -1.0:
             return False
 
         detection_time = Time.from_msg(detection.header.stamp)

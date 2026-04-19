@@ -36,6 +36,9 @@ class LiveLandingTestMission(BaseMission):
         self._landing_check_threshold_m = float(
             config.get("landing_check_threshold_m", 6.0)
         )
+        self._arrival_alt_tolerance_m = float(
+            config.get("arrival_alt_tolerance_m", 2.0)
+        )
         self._relaunch_altitude_m = float(config.get("relaunch_altitude_m", 12.0))
         self._descent_rate_mps = float(config.get("descent_rate_mps", 0.35))
         self._final_descent_rate_mps = float(
@@ -51,6 +54,8 @@ class LiveLandingTestMission(BaseMission):
         self._touchdown_dwell_s = float(config.get("touchdown_dwell_s", 0.5))
 
         self._state = LiveLandingTestState.INIT
+        self._fake_drop = True
+        self._delivery_complete = False
         self._touchdown_column: tuple[float, float] | None = None
         self._descent_target_altitude_m: float | None = None
         self._descent_last_update: Time | None = None
@@ -59,6 +64,7 @@ class LiveLandingTestMission(BaseMission):
         self._final_descent_hold_position: tuple[float, float] | None = None
         self._final_descent_target_altitude_m: float | None = None
         self._final_descent_last_update: Time | None = None
+        self._final_descent_last_status_log: Time | None = None
 
         context.clear_all_setpoints()
 
@@ -134,19 +140,19 @@ class LiveLandingTestMission(BaseMission):
             context.global_gps.longitude,
         )
         current_altitude = context.local_pose.pose.position.z
-        self._descent_target_altitude_m = current_altitude
-        self._descent_last_update = context.now()
         context.logger.info(
             f"[{self.name}] Captured landing column at "
             f"({self._touchdown_column[0]:.7f}, {self._touchdown_column[1]:.7f})"
         )
-
-        if current_altitude <= self._landing_check_threshold_m:
+        if self._within_touchdown_handoff_band(current_altitude):
             self._transition_to(
                 LiveLandingTestState.FINAL_FIXED_COLUMN_DESCENT,
                 context,
             )
             return MissionStatus.RUNNING
+
+        self._descent_target_altitude_m = current_altitude
+        self._descent_last_update = context.now()
 
         self._transition_to(LiveLandingTestState.DESCEND_IN_COLUMN, context)
         return MissionStatus.RUNNING
@@ -164,7 +170,7 @@ class LiveLandingTestMission(BaseMission):
             return MissionStatus.FAILURE
 
         current_altitude = context.local_pose.pose.position.z
-        if current_altitude <= self._landing_check_threshold_m:
+        if self._within_touchdown_handoff_band(current_altitude):
             self._transition_to(
                 LiveLandingTestState.FINAL_FIXED_COLUMN_DESCENT,
                 context,
@@ -247,6 +253,7 @@ class LiveLandingTestMission(BaseMission):
             )
             self._final_descent_target_altitude_m = context.local_pose.pose.position.z
             self._final_descent_last_update = context.now()
+            self._final_descent_last_status_log = context.now()
             context.logger.info(
                 f"[{self.name}] Freezing touchdown column at "
                 f"({self._final_descent_hold_position[0]:.7f}, "
@@ -275,6 +282,19 @@ class LiveLandingTestMission(BaseMission):
             0.0,
             self._final_descent_target_altitude_m - max_descent_step,
         )
+
+        if (
+            self._final_descent_last_status_log is None
+            or context.seconds_since(self._final_descent_last_status_log) >= 1.0
+        ):
+            landed_state = "unknown"
+            if context.extended_state is not None:
+                landed_state = str(context.extended_state.landed_state)
+            context.logger.info(
+                f"[{self.name}] Waiting for FCU landed state during touchdown descent "
+                f"(landed_state={landed_state}, altitude={current_altitude:.2f} m)"
+            )
+            self._final_descent_last_status_log = context.now()
 
         context.set_global_position_setpoint(
             self._final_descent_hold_position[0],
@@ -314,11 +334,17 @@ class LiveLandingTestMission(BaseMission):
         if self._ground_dwell_start is None:
             self._ground_dwell_start = context.now()
             context.logger.info(
-                f"[{self.name}] Holding on the ground for "
+                f"[{self.name}] Holding on target for "
                 f"{self._delivery_dwell_s:.1f} s before relaunch"
             )
+            if self._fake_drop:
+                context.logger.info(f"[{self.name}] Fake delivery complete")
+                self._delivery_complete = True
 
         if context.seconds_since(self._ground_dwell_start) < self._delivery_dwell_s:
+            return MissionStatus.RUNNING
+
+        if not self._delivery_complete:
             return MissionStatus.RUNNING
 
         self._transition_to(LiveLandingTestState.GUIDED_RELAUNCH, context)
@@ -353,6 +379,12 @@ class LiveLandingTestMission(BaseMission):
     def _handle_invalid_state(self, _context: MissionContext) -> MissionStatus:
         return MissionStatus.FAILURE
 
+    def _within_touchdown_handoff_band(self, current_altitude: float) -> bool:
+        return (
+            current_altitude - self._landing_check_threshold_m
+            <= self._arrival_alt_tolerance_m
+        )
+
     def _transition_to(
         self,
         new_state: LiveLandingTestState,
@@ -368,6 +400,7 @@ class LiveLandingTestMission(BaseMission):
             self._final_descent_hold_position = None
             self._final_descent_target_altitude_m = None
             self._final_descent_last_update = None
+            self._final_descent_last_status_log = None
         if new_state != LiveLandingTestState.GROUND_DWELL:
             self._ground_dwell_start = None
 

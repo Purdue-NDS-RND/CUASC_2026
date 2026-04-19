@@ -5,6 +5,7 @@ mission_sequence:
       name: live_landing_test                       # Human-readable mission instance name for logs.
       config:
         landing_check_threshold_m: 6.0             # Altitude where touchdown descent switches to the slower final phase.
+        arrival_alt_tolerance_m: 2.0              # Match package_delivery altitude handoff tolerance instead of requiring exactly 6.0 m.
         relaunch_altitude_m: 12.0                  # Altitude to climb back to after touchdown and ground dwell.
         descent_rate_mps: 0.35                     # Descent speed above the touchdown handoff altitude.
         final_descent_rate_mps: 0.25               # Slower descent speed during the fixed-column touchdown phase.

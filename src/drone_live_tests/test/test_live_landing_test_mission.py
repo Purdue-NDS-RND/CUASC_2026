@@ -137,6 +137,7 @@ class _ContextStub:
 def _make_mission(**config_overrides) -> LiveLandingTestMission:
     config = {
         "landing_check_threshold_m": 6.0,
+        "arrival_alt_tolerance_m": 2.0,
         "relaunch_altitude_m": 12.0,
         "descent_rate_mps": 0.35,
         "final_descent_rate_mps": 0.25,
@@ -212,6 +213,17 @@ class LiveLandingTestMissionTests(unittest.TestCase):
     def test_handoff_to_final_touchdown_occurs_at_threshold(self) -> None:
         mission = _make_mission()
         context = _ContextStub(altitude_m=6.0)
+        mission.on_enter(context)
+
+        while mission._state != LiveLandingTestState.FINAL_FIXED_COLUMN_DESCENT:
+            status = mission.update(context)
+            self.assertEqual(status, MissionStatus.RUNNING)
+
+        self.assertEqual(mission._state, LiveLandingTestState.FINAL_FIXED_COLUMN_DESCENT)
+
+    def test_handoff_to_final_touchdown_occurs_within_altitude_tolerance(self) -> None:
+        mission = _make_mission(landing_check_threshold_m=6.0, arrival_alt_tolerance_m=0.5)
+        context = _ContextStub(altitude_m=6.2)
         mission.on_enter(context)
 
         while mission._state != LiveLandingTestState.FINAL_FIXED_COLUMN_DESCENT:

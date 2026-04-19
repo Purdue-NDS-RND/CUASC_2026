@@ -1,0 +1,4 @@
+mission_executor:
+  ros__parameters:
+    loop_rate_hz: 20.0
+    abort_rtl_mode: "RTL"

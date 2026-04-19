@@ -145,6 +145,7 @@ class RedBullseyeMissionBase(BaseMission):
         target_altitude_m: float,
         descent_rate_mps: float,
         max_centering_speed_mps: float | None = None,
+        target_altitude_tolerance_m: float | None = None,
     ) -> TrackingVelocityCommand | None:
         if context.local_pose is None:
             return None
@@ -158,7 +159,10 @@ class RedBullseyeMissionBase(BaseMission):
 
         tracking_error_m, velocity_east, velocity_north = tracking
         altitude_error = abs(context.local_pose.pose.position.z - target_altitude_m)
-        reached_target_altitude = altitude_error <= self._arrival_alt_tolerance_m
+        altitude_tolerance_m = self._arrival_alt_tolerance_m
+        if target_altitude_tolerance_m is not None:
+            altitude_tolerance_m = max(0.0, float(target_altitude_tolerance_m))
+        reached_target_altitude = altitude_error <= altitude_tolerance_m
 
         vertical_velocity = 0.0
         if (

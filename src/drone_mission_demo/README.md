@@ -132,9 +132,12 @@ ArduPilot `DISARM_DELAY` accordingly. A safe starting point is
 `5-10 s` dwell.
 
 This v1 assumes the delivery target is on roughly the same ground plane as the original launch location.
+The real servo release sequence is still a simple v1 path; until the final
+actuator behavior is defined, `fake_drop: true` remains the safer demo setting.
 
 Delivery-specific config keys:
 - `landing_check_threshold_m` — local-altitude threshold where the mission freezes the current GPS position and starts the fixed-column touchdown
+- `touchdown_handoff_tolerance_m` — separate altitude tolerance used only for the fixed-column touchdown handoff so this transition is not coupled to the broader arrival-altitude tolerance
 - `touchdown_dwell_s` — landed-state debounce before the mission accepts touchdown
 - `delivery_dwell_s` — time to remain on the ground before relaunch
 - `relaunch_altitude_m` — altitude to climb back to after delivery

@@ -19,6 +19,20 @@ logic is used.
 
 ## Run
 
+Before launching on real hardware, request MAVLink streams and verify that
+landing-state telemetry is actually reaching the Jetson:
+
+```bash
+./set_stream_rate.sh 20
+ros2 topic echo /mavros/extended_state
+# optional:
+ros2 topic hz /mavros/extended_state
+```
+
+Do not launch the live landing test until `/mavros/extended_state` is
+publishing and `landed_state` is not `UNDEFINED`. SITL often provides this
+automatically; hardware may not.
+
 ```bash
 ros2 launch drone_live_tests live_landing_test.launch.py
 ```

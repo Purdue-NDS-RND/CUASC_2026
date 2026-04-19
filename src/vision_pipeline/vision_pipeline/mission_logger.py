@@ -16,6 +16,7 @@ import csv
 import math
 import os
 import time
+from collections import deque
 from datetime import datetime
 from typing import List, Tuple
 
@@ -109,8 +110,10 @@ class MissionLogger(Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self._drone_pose = None
+        self._pose_history = deque(
+            maxlen=200
+        )  # Holds ~10 seconds of flight history at 20Hz
         self._home = None
-
         # ------------------------------------------------------------------
         # Subscribers
         # ------------------------------------------------------------------
@@ -148,13 +151,14 @@ class MissionLogger(Node):
             self, Image, "/camera/image_raw", qos_profile=qos_profile
         )
 
-        # YOLO publishes Reliably, so it does not need a special QoS profile here
         det_sub = message_filters.Subscriber(
             self, Detection2DArray, "/drone_control/detection"
         )
 
-        self.ts = message_filters.ApproximateTimeSynchronizer(
-            [img_sub, det_sub], queue_size=10, slop=0.5
+        # THE FIX: Use ExactTimeSynchronizer and a massive queue!
+        # queue_size=60 gives the logger ~3.5 seconds of memory at 17 FPS.
+        self.ts = message_filters.ExactTimeSynchronizer(
+            [img_sub, det_sub], queue_size=60
         )
         self.ts.registerCallback(self._on_synced_data)
 
@@ -179,7 +183,17 @@ class MissionLogger(Node):
     def _init_csv(self):
         with open(self.csv_path, mode="w", newline="") as f:
             csv.writer(f).writerow(
-                ["Image_Name", "Latitude", "Longitude", "Time_UTC", "YOLO_Confidence"]
+                [
+                    "Image_Name",
+                    "Latitude",
+                    "Longitude",
+                    "Time_UTC",
+                    "YOLO_Confidence",
+                    "Pixel_U",
+                    "Pixel_V",
+                    "BBox_W",
+                    "BBox_H",
+                ]
             )
 
     def _log_readiness(self):
@@ -217,6 +231,7 @@ class MissionLogger(Node):
 
     def _on_pose(self, msg: PoseStamped) -> None:
         self._drone_pose = msg
+        self._pose_history.append(msg)
 
         # Log pose at most once per second so terminal isn't flooded
         now = time.time()
@@ -296,6 +311,13 @@ class MissionLogger(Node):
         frame = self.cv_bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
         targets_logged_this_frame = False
 
+        historical_pose = self._get_pose_at_time(img_msg.header.stamp)
+        if historical_pose is None:
+            self.get_logger().warn(
+                "   ↳ ❌ Dropping frame: No matching historical pose found."
+            )
+            return
+
         for det_idx, det in enumerate(det_array_msg.detections):
             u = det.bbox.center.position.x
             v = det.bbox.center.position.y
@@ -308,7 +330,7 @@ class MissionLogger(Node):
                 f"pixel=({u:.0f}, {v:.0f})"
             )
 
-            gps_coord = self._raycast_to_gps(u, v)
+            gps_coord = self._raycast_to_gps(u, v, historical_pose)
             if gps_coord is None:
                 self.get_logger().warn(
                     f"   ↳ ❌ Raycast returned None for pixel ({u:.0f}, {v:.0f})"
@@ -368,6 +390,10 @@ class MissionLogger(Node):
                         f"{target_lon:.7f}",
                         time_utc,
                         f"{confidence:.2f}",
+                        int(u),
+                        int(v),
+                        int(bbox_w),
+                        int(bbox_h),
                     ]
                 )
 
@@ -393,7 +419,7 @@ class MissionLogger(Node):
     # Raycast
     # ------------------------------------------------------------------
 
-    def _raycast_to_gps(self, u: float, v: float):
+    def _raycast_to_gps(self, u: float, v: float, pose: PoseStamped):
         """
         Mirrors offline_photogrammetry.py exactly:
           pixel → optical ray → NED body (hardcoded nadir axis swap)
@@ -434,7 +460,7 @@ class MissionLogger(Node):
         )
 
         # Step C: NED body → world NED (ArduPilot ZYX from MAVROS ENU quaternion)
-        q = self._drone_pose.pose.orientation
+        q = pose.pose.orientation
         r_enu = R_scipy.from_quat([q.x, q.y, q.z, q.w])
         roll_enu, pitch_enu, yaw_enu = r_enu.as_euler("xyz", degrees=False)
 
@@ -468,7 +494,7 @@ class MissionLogger(Node):
             [cam_offset_ned[1], cam_offset_ned[0], -cam_offset_ned[2]]
         )
 
-        drone_pos = self._drone_pose.pose.position
+        drone_pos = pose.pose.position
         cam_z = drone_pos.z + cam_offset_enu[2]
         ground_z = (
             self.get_parameter("ground_altitude_m").get_parameter_value().double_value
@@ -529,6 +555,34 @@ class MissionLogger(Node):
             * (math.pi / 180.0)
         )
         return math.hypot(dx, dy)
+
+    # ------------------------------------------------------------------
+    # Pose synchronization helper
+    # ------------------------------------------------------------------
+
+    def _get_pose_at_time(self, target_stamp):
+        if not self._pose_history:
+            return None
+
+        target_sec = target_stamp.sec + (target_stamp.nanosec * 1e-9)
+
+        # Find the pose in history with the closest timestamp to the image
+        best_pose = min(
+            self._pose_history,
+            key=lambda p: abs(
+                (p.header.stamp.sec + p.header.stamp.nanosec * 1e-9) - target_sec
+            ),
+        )
+
+        # Reject if the closest pose is more than 200ms away
+        best_sec = best_pose.header.stamp.sec + (best_pose.header.stamp.nanosec * 1e-9)
+        if abs(best_sec - target_sec) > 0.2:
+            self.get_logger().warn(
+                f"Best pose is {abs(best_sec - target_sec) * 1000:.0f}ms from image stamp — rejecting"
+            )
+            return None
+
+        return best_pose
 
 
 def main():

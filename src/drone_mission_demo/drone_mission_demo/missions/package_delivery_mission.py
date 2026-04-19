@@ -45,6 +45,9 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
                 config.get("touchdown_altitude_m", 0.35),
             )
         )
+        self._touchdown_handoff_tolerance_m = float(
+            config.get("touchdown_handoff_tolerance_m", 0.2)
+        )
         self._relaunch_altitude_m = float(
             config.get("relaunch_altitude_m", self._transit_altitude_m)
         )
@@ -239,6 +242,7 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
             context,
             target_altitude_m=self._landing_check_threshold_m,
             descent_rate_mps=descent_rate,
+            target_altitude_tolerance_m=self._touchdown_handoff_tolerance_m,
         )
         if command is None:
             self._reset_tracking_filter()
@@ -277,6 +281,12 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
                         "final touchdown descent"
                     )
                     return MissionStatus.FAILURE
+                context.logger.info(
+                    f"[{self.name}] Entering final touchdown column at "
+                    f"{context.local_pose.pose.position.z:.2f} m "
+                    f"(threshold {self._landing_check_threshold_m:.2f} m, "
+                    f"handoff tolerance {self._touchdown_handoff_tolerance_m:.2f} m)"
+                )
                 self._transition_to(
                     PackageDeliveryState.FINAL_FIXED_COLUMN_DESCENT,
                     context,

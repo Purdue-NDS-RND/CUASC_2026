@@ -11,6 +11,7 @@ simple_takeoff_service:
     required_topics:
       - "/mavros/local_position/pose"
       - "/mavros/imu/data"
+      - "/mavros/extended_state"
 
 mission_executor:
   ros__parameters:

@@ -13,7 +13,8 @@ proceeding to arm and take off.
 Flow:
   1. Idle until a service call arrives on drone_utils/takeoff
   2. Wait for MAVROS connection
-  3. Request MAVLink streams from the FCU (StreamRate service)
+  3. Request MAVLink streams from the FCU and explicitly enable
+     EXTENDED_SYS_STATE
   4. Wait for required telemetry topics to start publishing
   5. Switch to GUIDED, arm, take off
   6. Return to idle (ready for another call)
@@ -33,13 +34,16 @@ Service Clients:
   /mavros/cmd/arming       (mavros_msgs/CommandBool)     – arm / disarm
   /mavros/cmd/takeoff      (mavros_msgs/CommandTOL)      – MAVROS takeoff
   /mavros/set_mode         (mavros_msgs/SetMode)         – flight mode
-  /mavros/set_stream_rate  (mavros_msgs/StreamRate)       – MAVLink streams
+  /mavros/set_stream_rate      (mavros_msgs/StreamRate)       – MAVLink streams
+  /mavros/set_message_interval (mavros_msgs/MessageInterval)  – per-message rate
 
 Parameters:
   default_takeoff_altitude_m  (double, 20.0)
       Altitude used when the caller passes altitude <= 0.
   stream_rate_hz              (int, 20)
       MAVLink stream rate to request from the FCU.
+  extended_state_rate_hz      (double, 2.0)
+      Explicit rate request for MAVLink EXTENDED_SYS_STATE (message 245).
   required_topics             (string[], see defaults)
       List of MAVROS topics that must publish at least once before
       the takeoff sequence proceeds.  Supported topics are those
@@ -63,8 +67,14 @@ from rclpy.qos import qos_profile_sensor_data
 
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Imu, NavSatFix
-from mavros_msgs.msg import State
-from mavros_msgs.srv import CommandBool, CommandTOL, SetMode, StreamRate
+from mavros_msgs.msg import ExtendedState, State
+from mavros_msgs.srv import (
+    CommandBool,
+    CommandTOL,
+    MessageInterval,
+    SetMode,
+    StreamRate,
+)
 
 # Map of topic names to their message types.
 # Add entries here to support additional required_topics values.
@@ -72,10 +82,13 @@ TOPIC_TYPE_MAP: dict[str, type] = {
     "/mavros/local_position/pose": PoseStamped,
     "/mavros/imu/data": Imu,
     "/mavros/global_position/global": NavSatFix,
+    "/mavros/extended_state": ExtendedState,
 }
 
 
 class SimpleTakeoffService(Node):
+    EXTENDED_SYS_STATE_MESSAGE_ID = 245
+
     def __init__(self) -> None:
         super().__init__("simple_takeoff_service")
 
@@ -87,9 +100,11 @@ class SimpleTakeoffService(Node):
         self.declare_parameter("takeoff_retry_s", 5.0)
         self.declare_parameter("loop_rate_hz", 2.0)
         self.declare_parameter("stream_rate_hz", 20)
+        self.declare_parameter("extended_state_rate_hz", 2.0)
         self.declare_parameter("required_topics", [
             "/mavros/local_position/pose",
             "/mavros/imu/data",
+            "/mavros/extended_state",
         ])
 
         self._state: Optional[State] = None
@@ -143,6 +158,10 @@ class SimpleTakeoffService(Node):
         self._takeoff_client = self.create_client(CommandTOL, "/mavros/cmd/takeoff")
         self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
         self._stream_rate_client = self.create_client(StreamRate, "/mavros/set_stream_rate")
+        self._message_interval_client = self.create_client(
+            MessageInterval,
+            "/mavros/set_message_interval",
+        )
 
         self._takeoff_service = self.create_service(
             CommandTOL,
@@ -169,10 +188,15 @@ class SimpleTakeoffService(Node):
         return all(self._topic_received.values())
 
     def _request_streams(self) -> None:
-        """Send a single StreamRate request for all MAVLink stream groups."""
+        """Request both legacy stream groups and EXTENDED_SYS_STATE."""
         if not self._stream_rate_client.service_is_ready():
             self.get_logger().warn(
                 "Stream rate service not available yet — will retry"
+            )
+            return
+        if not self._message_interval_client.service_is_ready():
+            self.get_logger().warn(
+                "Message interval service not available yet — will retry"
             )
             return
         rate = (
@@ -180,13 +204,27 @@ class SimpleTakeoffService(Node):
             .get_parameter_value()
             .integer_value
         )
+        extended_state_rate = (
+            self.get_parameter("extended_state_rate_hz")
+            .get_parameter_value()
+            .double_value
+        )
         req = StreamRate.Request()
         req.stream_id = 0       # STREAM_ALL
         req.message_rate = rate
         req.on_off = True
         self._stream_rate_client.call_async(req)
+
+        message_req = MessageInterval.Request()
+        message_req.message_id = self.EXTENDED_SYS_STATE_MESSAGE_ID
+        message_req.message_rate = float(extended_state_rate)
+        self._message_interval_client.call_async(message_req)
+
         self._streams_requested = True
-        self.get_logger().info(f"Requested all MAVLink streams at {rate} Hz")
+        self.get_logger().info(
+            "Requested MAVLink streams at "
+            f"{rate} Hz and EXTENDED_SYS_STATE at {extended_state_rate:.1f} Hz"
+        )
 
     def _on_state(self, msg: State) -> None:
         self._state = msg

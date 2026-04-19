@@ -16,13 +16,14 @@ A timer-driven takeoff service that handles MAVROS stream setup, mode switching,
 **Sequence (timer-driven, non-blocking):**
 1. Wait for MAVROS connection (`/mavros/state.connected`)
 2. Request all MAVLink streams from the FCU via `/mavros/set_stream_rate`
-3. Wait for required telemetry topics to publish at least once
-4. Switch to GUIDED mode
-5. Arm the vehicle (with configurable retry limit)
-6. Send takeoff command
+3. Explicitly request MAVLink `EXTENDED_SYS_STATE` (message `245`) via `/mavros/set_message_interval`
+4. Wait for required telemetry topics to publish at least once
+5. Switch to GUIDED mode
+6. Arm the vehicle (with configurable retry limit)
+7. Send takeoff command
 
 **Why stream setup lives here:**
-On real hardware (Pixhawk over USB) the FCU does **not** automatically stream telemetry the way SITL does. Without an explicit `StreamRate` request, topics like `/mavros/local_position/pose` and `/mavros/imu/data` will never publish. Since every mission must take off, gating streams here means zero changes to downstream mission nodes.
+On real hardware (Pixhawk over USB) the FCU does **not** automatically stream telemetry the way SITL does. Without an explicit stream request, topics like `/mavros/local_position/pose`, `/mavros/imu/data`, and `/mavros/extended_state` may never publish. `simple_takeoff_service` now sends both the legacy `StreamRate` request and an explicit `MessageInterval` request for `EXTENDED_SYS_STATE` because the old stream-group API alone was not enough to make `/mavros/extended_state` appear on hardware. Since every mission must take off, gating streams here means zero changes to downstream mission nodes.
 
 In SITL the topics are already flowing, so the health checks pass instantly and there is no extra delay.
 
@@ -37,7 +38,8 @@ In SITL the topics are already flowing, so the health checks pass instantly and 
 | `takeoff_retry_s` | double | 5.0 | Seconds between takeoff retries |
 | `loop_rate_hz` | double | 2.0 | Timer frequency |
 | `stream_rate_hz` | int | 20 | MAVLink stream rate (Hz) requested from FCU |
-| `required_topics` | string[] | `["/mavros/local_position/pose", "/mavros/imu/data"]` | Topics that must publish before arming proceeds |
+| `extended_state_rate_hz` | double | 2.0 | Explicit MAVLink rate request for `EXTENDED_SYS_STATE` (message `245`) |
+| `required_topics` | string[] | `["/mavros/local_position/pose", "/mavros/imu/data", "/mavros/extended_state"]` | Topics that must publish before arming proceeds |
 
 **Adding more required topics:**
 
@@ -47,9 +49,59 @@ In SITL the topics are already flowing, so the health checks pass instantly and 
        "/mavros/local_position/pose": PoseStamped,
        "/mavros/imu/data": Imu,
        "/mavros/global_position/global": NavSatFix,   # already in the map
+       "/mavros/extended_state": ExtendedState,       # required for touchdown-capable missions
    }
    ```
 2. Add the topic name to `required_topics` in your mission YAML.
+
+`/mavros/extended_state` is now part of the default readiness contract because
+missions such as package delivery and live landing tests depend on valid
+`landed_state` data before they will begin touchdown logic.
+
+## Manual Stream Preflight
+
+`set_stream_rate.sh` is the manual hardware preflight helper:
+
+```bash
+./set_stream_rate.sh [stream_rate] [extended_state_rate]
+```
+
+It now sends the same two requests used by `simple_takeoff_service`:
+- service: `/mavros/set_stream_rate`
+- `stream_id: 0`
+- `message_rate: <stream_rate>`
+- `on_off: true`
+- service: `/mavros/set_message_interval`
+- `message_id: 245`
+- `message_rate: <extended_state_rate>`
+
+It only requests streams. It does **not** verify that any specific topic
+actually became live afterward.
+
+`check_mavros_streams.sh` is the manual verification helper:
+
+```bash
+./check_mavros_streams.sh [stream_rate] [extended_state_rate] [topic_timeout_s]
+```
+
+It calls `set_stream_rate.sh`, then waits for:
+- `/mavros/imu/data`
+- `/mavros/local_position/pose`
+- `/mavros/extended_state`
+
+It fails if `/mavros/extended_state` still reports `landed_state=0`
+(`UNDEFINED`).
+
+For manual real-hardware workflows such as `drone_live_tests`, verify the
+landing-state stream explicitly before launching missions:
+
+```bash
+./check_mavros_streams.sh 20
+```
+
+You want `/mavros/extended_state` to publish a non-`UNDEFINED` `landed_state`
+value before takeoff. In SITL this often works automatically; on hardware it
+must be treated as part of the preflight telemetry contract.
 
 **Example call:**
 ```bash

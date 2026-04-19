@@ -34,7 +34,7 @@ CLUSTERS_DIR = os.path.join(FLIGHT_DIR, "target_clusters")
 SUMMARY_CSV = os.path.join(CLUSTERS_DIR, "cluster_summary.csv")
 ANNOTATION_CSV = os.path.join(CLUSTERS_DIR, "chip_annotations.csv")
 
-TOLERANCE = 15  # Set to 1.0 meters based on your previous request
+TOLERANCE = 4  # Set to 1.0 meters based on your previous request
 R_EARTH = 6378137.0
 
 

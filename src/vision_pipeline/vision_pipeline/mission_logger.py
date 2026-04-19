@@ -173,7 +173,7 @@ class MissionLogger(Node):
             f"   mount offset (m)  : x={self._mount_x} y={self._mount_y} z={self._mount_z}\n"
             f"   mount rotation(°) : roll={self._mount_roll} "
             f"pitch={self._mount_pitch} yaw={self._mount_yaw}\n"
-            f"   sync slop: 0.5 s | min_dist_m: {self.min_dist_m}"
+            f"   sync: ExactTimeSynchronizer queue=60 | min_dist_m: {self.min_dist_m}"
         )
 
     # ------------------------------------------------------------------

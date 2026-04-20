@@ -10,28 +10,20 @@ Publishes:
                                                           target offsets in [-1, 1]
   /drone_package_drop/image_size        (PointStamped)  — raw image width/height
                                                           for observability/debugging
+  /drone_package_drop/debug_image       (sensor_msgs/Image) — annotated debug stream
+                                                              when debug_view=True
 
 The detection uses a simple HSV colour filter.  Tune the HSV bounds
 via parameters to match whatever colour your ground target is.
 
 Parameters:
-  image_topic       Camera topic name           (default "camera/image")
+  image_topic       Camera topic name            (default "camera/image")
   compressed_input  Subscribe to CompressedImage instead of Image
-  target_h_low      HSV hue lower bound  0-179  (default 0)
-  target_h_high     HSV hue upper bound  0-179  (default 10)
-  target_s_low      HSV sat lower bound  0-255  (default 100)
-  target_s_high     HSV sat upper bound  0-255  (default 255)
-  target_v_low      HSV val lower bound  0-255  (default 100)
-  target_v_high     HSV val upper bound  0-255  (default 255)
-  min_contour_area  Minimum blob area in px²    (default 200)
-  debug_view        Show OpenCV debug window     (default False)
+  debug_view        Publish a debug image stream (default False)
 """
 
 import cv2
 import numpy as np
-import queue
-import threading
-import os
 
 import rclpy
 from geometry_msgs.msg import PointStamped
@@ -73,26 +65,16 @@ class TargetCV(Node):
         self._image_size_pub = self.create_publisher(
             PointStamped, "/drone_package_drop/image_size", 10
         )
-        self._annotated_pub = self.create_publisher(
-            Image, "/drone_package_drop/annotated_image", 10
+        self._debug_enabled = (
+            self.get_parameter("debug_view").get_parameter_value().bool_value
         )
+        self._debug_image_pub = None
+        if self._debug_enabled:
+            self._debug_image_pub = self.create_publisher(
+                Image, "/drone_package_drop/debug_image", 10
+            )
 
         self._image_size: tuple[int, int] | None = None
-
-        self._display_queue = queue.Queue(maxsize=1)
-        self._display_thread = None
-        self._display_running = False
-
-        if self.get_parameter("debug_view").get_parameter_value().bool_value:
-            if not os.environ.get("DISPLAY"):
-                self.get_logger().warn(
-                    "debug_view requested but DISPLAY is not set; no popup will appear"
-                )
-            self._display_running = True
-            self._display_thread = threading.Thread(
-                target=self._display_worker, daemon=True
-            )
-            self._display_thread.start()
 
         self._set_processing_enabled(
             self.get_parameter("start_enabled").get_parameter_value().bool_value
@@ -245,16 +227,18 @@ class TargetCV(Node):
             self.get_logger().info(f"Image size: {width}x{height}")
 
         annotated, center, area = self._detect_target_center_moments(frame)
-        self._annotated_pub.publish(
-            Image(
-                header=header,
-                height=annotated.shape[0],
-                width=annotated.shape[1],
-                encoding="bgr8",
-                is_bigendian=0,
-                data=annotated.tobytes(),
+
+        if self._debug_image_pub is not None:
+            self._debug_image_pub.publish(
+                Image(
+                    header=header,
+                    height=annotated.shape[0],
+                    width=annotated.shape[1],
+                    encoding="bgr8",
+                    is_bigendian=0,
+                    data=annotated.tobytes(),
+                )
             )
-        )
 
         if center is not None:
             center_x, center_y = center
@@ -271,12 +255,6 @@ class TargetCV(Node):
         else:
             self.last_detection = None
             self._publish_not_found_detection()
-
-        if self._display_running:
-            try:
-                self._display_queue.put_nowait(annotated)
-            except queue.Full:
-                pass
 
     def _on_image(self, msg: Image) -> None:
         try:
@@ -295,15 +273,6 @@ class TargetCV(Node):
             return
         self._process_frame(frame, msg.header, frame.shape[1], frame.shape[0])
 
-    def _display_worker(self) -> None:
-        while self._display_running:
-            try:
-                frame = self._display_queue.get(timeout=0.5)
-                cv2.imshow("TargetCV", frame)
-                cv2.waitKey(1)
-            except queue.Empty:
-                continue
-
 
 def main() -> None:
     rclpy.init()
@@ -313,10 +282,6 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        node._display_running = False
-        if node._display_thread:
-            node._display_thread.join(timeout=2.0)
-        cv2.destroyAllWindows()
         node.destroy_node()
         rclpy.shutdown()
 

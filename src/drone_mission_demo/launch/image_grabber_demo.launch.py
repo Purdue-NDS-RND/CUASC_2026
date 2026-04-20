@@ -20,6 +20,7 @@ def generate_launch_description() -> LaunchDescription:
                 "fps": LaunchConfiguration("fps"),
                 "image_publishing_rate": LaunchConfiguration("image_publishing_rate"),
                 "publish_full_res": LaunchConfiguration("publish_full_res"),
+                "publish_monitor_stream": LaunchConfiguration("publish_monitor_stream"),
                 "monitor_width": LaunchConfiguration("monitor_width"),
                 "monitor_height": LaunchConfiguration("monitor_height"),
                 "shutter_speed": LaunchConfiguration("shutter_speed"),
@@ -56,7 +57,7 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "image_publishing_rate",
-                default_value="10.0",
+                default_value="5.0",
                 description="ROS image publish rate in Hz",
             ),
             DeclareLaunchArgument(
@@ -65,13 +66,18 @@ def generate_launch_description() -> LaunchDescription:
                 description="Publish the full-resolution frame on the main image topic",
             ),
             DeclareLaunchArgument(
+                "publish_monitor_stream",
+                default_value="false",
+                description="Also publish the extra monitor image topic",
+            ),
+            DeclareLaunchArgument(
                 "monitor_width",
-                default_value="960",
+                default_value="640",
                 description="Width of the low-latency published stream",
             ),
             DeclareLaunchArgument(
                 "monitor_height",
-                default_value="540",
+                default_value="360",
                 description="Height of the low-latency published stream",
             ),
             DeclareLaunchArgument(

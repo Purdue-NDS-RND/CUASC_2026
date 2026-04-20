@@ -27,6 +27,7 @@ class ImageGrabber(Node):
         self.declare_parameter("wb_mode", 6)
         self.declare_parameter("image_publishing_rate", 4.0)
         self.declare_parameter("publish_full_res", False)
+        self.declare_parameter("publish_monitor_stream", False)
         self.declare_parameter("monitor_width", 960)
         self.declare_parameter("monitor_height", 540)
         self.declare_parameter("camera_info_file", "arducam_info.yaml")
@@ -41,6 +42,7 @@ class ImageGrabber(Node):
         wb = self.get_parameter("wb_mode").value
         yaml_file = self.get_parameter("camera_info_file").value
         self._publish_full_res = self.get_parameter("publish_full_res").value
+        self._publish_monitor_stream = self.get_parameter("publish_monitor_stream").value
         self._monitor_width = self.get_parameter("monitor_width").value
         self._monitor_height = self.get_parameter("monitor_height").value
 
@@ -78,7 +80,13 @@ class ImageGrabber(Node):
         )
         self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
         self._info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", qos)
-        self._monitor_pub = self.create_publisher(Image, "/camera/image_monitor", qos)
+        self._monitor_pub = None
+        if self._publish_monitor_stream:
+            self._monitor_pub = self.create_publisher(
+                Image,
+                "/camera/image_monitor",
+                qos,
+            )
 
         rate = self.get_parameter("image_publishing_rate").value
         self._timer = self.create_timer(1.0 / max(rate, 1.0), self._on_timer)
@@ -97,6 +105,7 @@ class ImageGrabber(Node):
             f"   Sensor FPS : {fps}\n"
             f"   Publish Hz : {rate}\n"
             f"   Full-res   : {self._publish_full_res}\n"
+            f"   Monitor pub: {self._publish_monitor_stream}\n"
             f"   Monitor    : {self._monitor_width}x{self._monitor_height}\n"
             f"   QoS        : BEST_EFFORT depth=1\n"
             f"   Timelapse  : {self._enable_timelapse} "
@@ -251,10 +260,14 @@ class ImageGrabber(Node):
             self._camera_info_msg.header.stamp = now
             self._info_pub.publish(self._camera_info_msg)
 
-            monitor_msg = self._cv_bridge.cv2_to_imgmsg(monitor_frame, encoding="bgr8")
-            monitor_msg.header.stamp = now
-            monitor_msg.header.frame_id = "camera_link"
-            self._monitor_pub.publish(monitor_msg)
+            if self._monitor_pub is not None:
+                monitor_msg = self._cv_bridge.cv2_to_imgmsg(
+                    monitor_frame,
+                    encoding="bgr8",
+                )
+                monitor_msg.header.stamp = now
+                monitor_msg.header.frame_id = "camera_link"
+                self._monitor_pub.publish(monitor_msg)
 
             # --- Timelapse save ---
             if self._enable_timelapse:

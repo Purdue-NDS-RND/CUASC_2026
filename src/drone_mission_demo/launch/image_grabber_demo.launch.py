@@ -9,7 +9,7 @@ def generate_launch_description() -> LaunchDescription:
 
     image_grabber_node = Node(
         package="vision_pipeline",
-        executable="image_grabber",
+        executable="compressed_grabber",
         name="image_grabber",
         output="screen",
         remappings=[

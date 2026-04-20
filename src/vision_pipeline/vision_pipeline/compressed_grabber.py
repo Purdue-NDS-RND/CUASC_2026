@@ -1,5 +1,5 @@
 """
-Arducam Jetson Image Grabber Node (Fully Rectified & Calibrated)
+Arducam Jetson Image Grabber (Compressed / Low-Bandwidth Variant)
 """
 
 import os
@@ -13,12 +13,12 @@ from ament_index_python.packages import get_package_share_directory
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 
 
-class ImageGrabber(Node):
+class CompressedGrabber(Node):
     def __init__(self) -> None:
-        super().__init__("image_grabber")
+        super().__init__("compressed_grabber")
 
         self.declare_parameter("image_width", 3840)
         self.declare_parameter("image_height", 2160)
@@ -26,6 +26,13 @@ class ImageGrabber(Node):
         self.declare_parameter("shutter_speed", 1000)
         self.declare_parameter("wb_mode", 6)
         self.declare_parameter("image_publishing_rate", 4.0)
+        self.declare_parameter("publish_raw_stream", True)
+        self.declare_parameter("publish_full_res", False)
+        self.declare_parameter("publish_monitor_stream", False)
+        self.declare_parameter("publish_compressed_stream", True)
+        self.declare_parameter("compressed_quality", 70)
+        self.declare_parameter("monitor_width", 960)
+        self.declare_parameter("monitor_height", 540)
         self.declare_parameter("camera_info_file", "arducam_info.yaml")
         self.declare_parameter("enable_timelapse", True)
         self.declare_parameter("save_dir", "/home/nds2/camera_captures_calibrated")
@@ -37,6 +44,15 @@ class ImageGrabber(Node):
         shutter = self.get_parameter("shutter_speed").value
         wb = self.get_parameter("wb_mode").value
         yaml_file = self.get_parameter("camera_info_file").value
+        self._publish_raw_stream = self.get_parameter("publish_raw_stream").value
+        self._publish_full_res = self.get_parameter("publish_full_res").value
+        self._publish_monitor_stream = self.get_parameter("publish_monitor_stream").value
+        self._publish_compressed_stream = self.get_parameter(
+            "publish_compressed_stream"
+        ).value
+        self._compressed_quality = self.get_parameter("compressed_quality").value
+        self._monitor_width = self.get_parameter("monitor_width").value
+        self._monitor_height = self.get_parameter("monitor_height").value
 
         self._enable_timelapse = self.get_parameter("enable_timelapse").value
         self._save_dir = self.get_parameter("save_dir").value
@@ -56,52 +72,62 @@ class ImageGrabber(Node):
 
         if not self._camera.isOpened():
             raise RuntimeError(
-                "❌ Camera failed to initialize — check GStreamer pipeline."
+                "Camera failed to initialize — check GStreamer pipeline."
             )
+        self._camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        # ------------------------------------------------------------------
-        # QoS: BEST_EFFORT + depth=1 so Foxglove always gets the newest frame.
-        # RELIABLE with a deep queue causes Foxglove to see stale backlogged
-        # frames and appear frozen on the first image.
-        # ------------------------------------------------------------------
         qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=1,
         )
-        self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
+        self._image_pub = None
+        if self._publish_raw_stream:
+            self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
         self._info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", qos)
-        self._monitor_pub = self.create_publisher(Image, "/camera/image_monitor", qos)
+        self._compressed_pub = None
+        if self._publish_compressed_stream:
+            self._compressed_pub = self.create_publisher(
+                CompressedImage,
+                "/camera/image_raw/compressed",
+                qos,
+            )
+        self._monitor_pub = None
+        if self._publish_monitor_stream:
+            self._monitor_pub = self.create_publisher(
+                Image,
+                "/camera/image_monitor",
+                qos,
+            )
 
         rate = self.get_parameter("image_publishing_rate").value
         self._timer = self.create_timer(1.0 / max(rate, 1.0), self._on_timer)
 
-        # ------------------------------------------------------------------
-        # Verbose diagnostics state
-        # ------------------------------------------------------------------
         self._frames_published = 0
         self._frames_read_failed = 0
         self._last_hz_check_time = time.time()
         self._frames_since_hz = 0
 
         self.get_logger().info(
-            f"✅ ImageGrabber ready.\n"
+            f"CompressedGrabber ready.\n"
             f"   Resolution : {self.width}x{self.height}\n"
             f"   Sensor FPS : {fps}\n"
             f"   Publish Hz : {rate}\n"
+            f"   Raw stream : {self._publish_raw_stream}\n"
+            f"   Full-res   : {self._publish_full_res}\n"
+            f"   Compressed : {self._publish_compressed_stream} "
+            f"(jpeg q={self._compressed_quality})\n"
+            f"   Monitor pub: {self._publish_monitor_stream}\n"
+            f"   Monitor    : {self._monitor_width}x{self._monitor_height}\n"
             f"   QoS        : BEST_EFFORT depth=1\n"
             f"   Timelapse  : {self._enable_timelapse} "
-            f"(every {self._save_interval}s → {self._save_dir})"
+            f"(every {self._save_interval}s -> {self._save_dir})"
         )
-
-    # ------------------------------------------------------------------
-    # Camera info loader
-    # ------------------------------------------------------------------
 
     def _load_camera_info(self, filename):
         pkg_share = get_package_share_directory("vision_pipeline")
         yaml_path = os.path.join(pkg_share, "config", filename)
-        self.get_logger().info(f"📷 Loading camera calibration: {yaml_path}")
+        self.get_logger().info(f"Loading camera calibration: {yaml_path}")
 
         with open(yaml_path, "r") as fh:
             calib_data = yaml.safe_load(fh)
@@ -117,24 +143,23 @@ class ImageGrabber(Node):
         if "projection_matrix" in calib_data:
             msg.p = calib_data["projection_matrix"]["data"]
         else:
-            K = calib_data["camera_matrix"]["data"]
+            k = calib_data["camera_matrix"]["data"]
             msg.p = [
-                K[0],
-                K[1],
-                K[2],
+                k[0],
+                k[1],
+                k[2],
                 0.0,
-                K[3],
-                K[4],
-                K[5],
+                k[3],
+                k[4],
+                k[5],
                 0.0,
-                K[6],
-                K[7],
-                K[8],
+                k[6],
+                k[7],
+                k[8],
                 0.0,
             ]
             self.get_logger().warn(
-                "projection_matrix not found in YAML — built P from K. "
-                "Run camera_calibration to regenerate the YAML for best accuracy."
+                "projection_matrix not found in YAML — built P from K."
             )
 
         self.get_logger().info(
@@ -142,45 +167,35 @@ class ImageGrabber(Node):
         )
         return msg
 
-    # ------------------------------------------------------------------
-    # Rectification map setup
-    # ------------------------------------------------------------------
-
     def _setup_rectification_maps(self):
-        self.get_logger().info("📐 Computing lens distortion maps (alpha=0)...")
-        K = np.array(self._camera_info_msg.k).reshape((3, 3))
-        D = np.array(self._camera_info_msg.d)
+        self.get_logger().info("Computing lens distortion maps (alpha=0)...")
+        k = np.array(self._camera_info_msg.k).reshape((3, 3))
+        d = np.array(self._camera_info_msg.d)
 
-        new_K, roi = cv2.getOptimalNewCameraMatrix(
-            K, D, (self.width, self.height), 0, (self.width, self.height)
+        new_k, roi = cv2.getOptimalNewCameraMatrix(
+            k, d, (self.width, self.height), 0, (self.width, self.height)
         )
 
-        # --- ADD THESE LINES: Overwrite the message so downstream nodes use new_K ---
-        self._camera_info_msg.k = new_K.flatten().tolist()
+        self._camera_info_msg.k = new_k.flatten().tolist()
         self._camera_info_msg.p = [
-            new_K[0, 0],
-            new_K[0, 1],
-            new_K[0, 2],
+            new_k[0, 0],
+            new_k[0, 1],
+            new_k[0, 2],
             0.0,
-            new_K[1, 0],
-            new_K[1, 1],
-            new_K[1, 2],
+            new_k[1, 0],
+            new_k[1, 1],
+            new_k[1, 2],
             0.0,
-            new_K[2, 0],
-            new_K[2, 1],
-            new_K[2, 2],
+            new_k[2, 0],
+            new_k[2, 1],
+            new_k[2, 2],
             0.0,
         ]
-        # ----------------------------------------------------------------------------
 
         self.map1, self.map2 = cv2.initUndistortRectifyMap(
-            K, D, None, new_K, (self.width, self.height), cv2.CV_16SC2
+            k, d, None, new_k, (self.width, self.height), cv2.CV_16SC2
         )
-        self.get_logger().info(f"   new_K = {new_K[0].tolist()} ...\n   ROI   = {roi}")
-
-    # ------------------------------------------------------------------
-    # GStreamer pipeline string
-    # ------------------------------------------------------------------
+        self.get_logger().info(f"   new_K = {new_k[0].tolist()} ...\n   ROI   = {roi}")
 
     def _get_pipeline(self, width, height, fps, shutter_speed_inv, wb_mode):
         exp_str = (
@@ -193,14 +208,11 @@ class ImageGrabber(Node):
             f"video/x-raw(memory:NVMM), width={width}, height={height}, "
             f"format=NV12, framerate={fps}/1 ! "
             f"nvvidconv ! video/x-raw, format=BGRx ! "
-            f"videoconvert ! video/x-raw, format=BGR ! appsink drop=1"
+            f"videoconvert ! video/x-raw, format=BGR ! "
+            f"appsink drop=1 max-buffers=1 sync=false"
         )
-        self.get_logger().info(f"🎬 GStreamer pipeline:\n   {pipeline}")
+        self.get_logger().info(f"GStreamer pipeline:\n   {pipeline}")
         return pipeline
-
-    # ------------------------------------------------------------------
-    # Timer callback
-    # ------------------------------------------------------------------
 
     def _on_timer(self) -> None:
         try:
@@ -208,39 +220,68 @@ class ImageGrabber(Node):
             if not success:
                 self._frames_read_failed += 1
                 self.get_logger().warn(
-                    f"⚠️  camera.read() returned False "
+                    f"camera.read() returned False "
                     f"(total failures: {self._frames_read_failed}). "
                     "GStreamer pipeline may have stalled."
                 )
                 return
 
-            # Rectify (undistort) the raw frame
+            if self._frames_read_failed:
+                self._frames_read_failed = 0
+
             frame = cv2.remap(
                 raw_frame, self.map1, self.map2, interpolation=cv2.INTER_LINEAR
             )
 
             now = self.get_clock().now().to_msg()
 
-            # --- Full-res publish (for YOLO) ---
-            img_msg = self._cv_bridge.cv2_to_imgmsg(frame, encoding="bgr8")
-            img_msg.header.stamp = now
-            img_msg.header.frame_id = "camera_link"
-            self._image_pub.publish(img_msg)
+            monitor_frame = cv2.resize(
+                frame,
+                (self._monitor_width, self._monitor_height),
+                interpolation=cv2.INTER_LINEAR,
+            )
 
-            # --- Camera info ---
+            primary_frame = frame if self._publish_full_res else monitor_frame
+
+            if self._image_pub is not None:
+                img_msg = self._cv_bridge.cv2_to_imgmsg(primary_frame, encoding="bgr8")
+                img_msg.header.stamp = now
+                img_msg.header.frame_id = "camera_link"
+                self._image_pub.publish(img_msg)
+
+            if self._compressed_pub is not None:
+                ok, encoded = cv2.imencode(
+                    ".jpg",
+                    primary_frame,
+                    [
+                        int(cv2.IMWRITE_JPEG_QUALITY),
+                        int(self._compressed_quality),
+                    ],
+                )
+                if ok:
+                    compressed_msg = CompressedImage()
+                    compressed_msg.header.stamp = now
+                    compressed_msg.header.frame_id = "camera_link"
+                    compressed_msg.format = "jpeg"
+                    compressed_msg.data = encoded.tobytes()
+                    self._compressed_pub.publish(compressed_msg)
+                else:
+                    self.get_logger().warn(
+                        "Failed to JPEG-encode frame for compressed stream"
+                    )
+
             self._camera_info_msg.header.stamp = now
             self._info_pub.publish(self._camera_info_msg)
 
-            # --- Monitor stream for Foxglove (960x540, ~26 MB/s at 17Hz) ---
-            monitor_frame = cv2.resize(
-                frame, (960, 540), interpolation=cv2.INTER_LINEAR
-            )
-            monitor_msg = self._cv_bridge.cv2_to_imgmsg(monitor_frame, encoding="bgr8")
-            monitor_msg.header.stamp = now
-            monitor_msg.header.frame_id = "camera_link"
-            self._monitor_pub.publish(monitor_msg)
+            if self._monitor_pub is not None:
+                monitor_msg = self._cv_bridge.cv2_to_imgmsg(
+                    monitor_frame,
+                    encoding="bgr8",
+                )
+                monitor_msg.header.stamp = now
+                monitor_msg.header.frame_id = "camera_link"
+                self._monitor_pub.publish(monitor_msg)
 
-            # --- Timelapse save ---
             if self._enable_timelapse:
                 current_time = self.get_clock().now().nanoseconds / 1e9
                 if current_time - self._last_save_time >= self._save_interval:
@@ -250,7 +291,6 @@ class ImageGrabber(Node):
                     cv2.imwrite(filename, frame)
                     self._last_save_time = current_time
 
-            # --- Verbose rate logging every 5 seconds ---
             self._frames_published += 1
             self._frames_since_hz += 1
             now_wall = time.time()
@@ -258,27 +298,30 @@ class ImageGrabber(Node):
             if elapsed >= 5.0:
                 actual_hz = self._frames_since_hz / elapsed
                 self.get_logger().info(
-                    f"📡 ImageGrabber — published {self._frames_published} frames total | "
+                    f"CompressedGrabber — published {self._frames_published} frames total | "
                     f"actual rate: {actual_hz:.1f} Hz | "
                     f"read failures: {self._frames_read_failed}"
                 )
                 self._frames_since_hz = 0
                 self._last_hz_check_time = now_wall
 
-        except Exception as e:
+        except Exception as exc:
             self.get_logger().error(
-                f"❌ _on_timer exception (timer will continue): {e}"
+                f"_on_timer exception (timer will continue): {exc}"
             )
+
+    def close(self) -> None:
+        if hasattr(self, "_camera"):
+            self._camera.release()
 
 
 def main() -> None:
     rclpy.init()
-    node = ImageGrabber()
+    node = CompressedGrabber()
     try:
         rclpy.spin(node)
     finally:
-        if hasattr(node, "_camera"):
-            node._camera.release()
+        node.close()
         node.destroy_node()
         rclpy.shutdown()
 

@@ -9,16 +9,28 @@ def generate_launch_description() -> LaunchDescription:
 
     image_grabber_node = Node(
         package="vision_pipeline",
-        executable="image_grabber",
+        executable="compressed_grabber",
         name="image_grabber",
         output="screen",
-        remappings=[("/camera/image_raw", image_topic)],
+        remappings=[
+            ("/camera/image_raw", image_topic),
+            ("/camera/image_raw/compressed", [image_topic, "/compressed"]),
+        ],
         parameters=[
             {
                 "image_width": LaunchConfiguration("image_width"),
                 "image_height": LaunchConfiguration("image_height"),
                 "fps": LaunchConfiguration("fps"),
                 "image_publishing_rate": LaunchConfiguration("image_publishing_rate"),
+                "publish_raw_stream": LaunchConfiguration("publish_raw_stream"),
+                "publish_full_res": LaunchConfiguration("publish_full_res"),
+                "publish_monitor_stream": LaunchConfiguration("publish_monitor_stream"),
+                "publish_compressed_stream": LaunchConfiguration(
+                    "publish_compressed_stream"
+                ),
+                "compressed_quality": LaunchConfiguration("compressed_quality"),
+                "monitor_width": LaunchConfiguration("monitor_width"),
+                "monitor_height": LaunchConfiguration("monitor_height"),
                 "shutter_speed": LaunchConfiguration("shutter_speed"),
                 "wb_mode": LaunchConfiguration("wb_mode"),
                 "camera_info_file": LaunchConfiguration("camera_info_file"),
@@ -53,8 +65,43 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "image_publishing_rate",
-                default_value="15.0",
+                default_value="5.0",
                 description="ROS image publish rate in Hz",
+            ),
+            DeclareLaunchArgument(
+                "publish_raw_stream",
+                default_value="false",
+                description="Publish the raw image topic for local consumers",
+            ),
+            DeclareLaunchArgument(
+                "publish_full_res",
+                default_value="false",
+                description="Publish the full-resolution frame on the main image topic",
+            ),
+            DeclareLaunchArgument(
+                "publish_monitor_stream",
+                default_value="false",
+                description="Also publish the extra monitor image topic",
+            ),
+            DeclareLaunchArgument(
+                "publish_compressed_stream",
+                default_value="true",
+                description="Also publish a JPEG-compressed image topic for remote viewing",
+            ),
+            DeclareLaunchArgument(
+                "compressed_quality",
+                default_value="70",
+                description="JPEG quality for the compressed image topic",
+            ),
+            DeclareLaunchArgument(
+                "monitor_width",
+                default_value="640",
+                description="Width of the low-latency published stream",
+            ),
+            DeclareLaunchArgument(
+                "monitor_height",
+                default_value="360",
+                description="Height of the low-latency published stream",
             ),
             DeclareLaunchArgument(
                 "shutter_speed",

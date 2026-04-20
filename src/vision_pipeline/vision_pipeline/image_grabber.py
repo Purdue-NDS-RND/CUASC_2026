@@ -3,7 +3,6 @@ Arducam Jetson Image Grabber Node (Fully Rectified & Calibrated)
 """
 
 import os
-import threading
 import time
 
 import cv2
@@ -80,16 +79,6 @@ class ImageGrabber(Node):
         self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
         self._info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", qos)
         self._monitor_pub = self.create_publisher(Image, "/camera/image_monitor", qos)
-
-        self._latest_raw_frame = None
-        self._frame_lock = threading.Lock()
-        self._capture_running = True
-        self._capture_thread = threading.Thread(
-            target=self._capture_loop,
-            name="image_grabber_capture",
-            daemon=True,
-        )
-        self._capture_thread.start()
 
         rate = self.get_parameter("image_publishing_rate").value
         self._timer = self.create_timer(1.0 / max(rate, 1.0), self._on_timer)
@@ -220,33 +209,22 @@ class ImageGrabber(Node):
         return pipeline
 
     # ------------------------------------------------------------------
-    # Capture / publish
+    # Publish
     # ------------------------------------------------------------------
-
-    def _capture_loop(self) -> None:
-        while self._capture_running:
-            success, raw_frame = self._camera.read()
-            if not success:
-                self._frames_read_failed += 1
-                time.sleep(0.01)
-                continue
-
-            with self._frame_lock:
-                self._latest_raw_frame = raw_frame
 
     def _on_timer(self) -> None:
         try:
-            with self._frame_lock:
-                if self._latest_raw_frame is None:
-                    return
-                raw_frame = self._latest_raw_frame.copy()
-
-            if self._frames_read_failed > 0:
+            success, raw_frame = self._camera.read()
+            if not success:
+                self._frames_read_failed += 1
                 self.get_logger().warn(
                     f"⚠️  camera.read() returned False "
                     f"(total failures: {self._frames_read_failed}). "
                     "GStreamer pipeline may have stalled."
                 )
+                return
+
+            if self._frames_read_failed:
                 self._frames_read_failed = 0
 
             # Rectify (undistort) the raw frame
@@ -309,9 +287,6 @@ class ImageGrabber(Node):
             )
 
     def close(self) -> None:
-        self._capture_running = False
-        if hasattr(self, "_capture_thread") and self._capture_thread.is_alive():
-            self._capture_thread.join(timeout=1.0)
         if hasattr(self, "_camera"):
             self._camera.release()
 

@@ -2,7 +2,8 @@
 Target CV Node — Detect a coloured target from a downward-facing camera.
 
 Subscribes to:
-  camera/image              (sensor_msgs/Image)   — raw camera frame
+  camera/image              (sensor_msgs/Image)            — raw camera frame
+  camera/image/compressed   (sensor_msgs/CompressedImage)  — compressed camera frame
 
 Publishes:
   /drone_package_drop/target_detection  (PointStamped)  — centered normalized
@@ -15,6 +16,7 @@ via parameters to match whatever colour your ground target is.
 
 Parameters:
   image_topic       Camera topic name           (default "camera/image")
+  compressed_input  Subscribe to CompressedImage instead of Image
   target_h_low      HSV hue lower bound  0-179  (default 0)
   target_h_high     HSV hue upper bound  0-179  (default 10)
   target_s_low      HSV sat lower bound  0-255  (default 100)
@@ -29,12 +31,13 @@ import cv2
 import numpy as np
 import queue
 import threading
+import os
 
 import rclpy
 from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage, Image
 from std_srvs.srv import SetBool
 
 
@@ -44,11 +47,15 @@ class TargetCV(Node):
 
         # Parameters
         self.declare_parameter("image_topic", "camera/image")
+        self.declare_parameter("compressed_input", False)
         self.declare_parameter("debug_view", False)
         self.declare_parameter("start_enabled", True)
 
         self._image_topic = (
             self.get_parameter("image_topic").get_parameter_value().string_value
+        )
+        self._compressed_input = (
+            self.get_parameter("compressed_input").get_parameter_value().bool_value
         )
         self._enabled = False
         self._image_sub = None
@@ -77,6 +84,10 @@ class TargetCV(Node):
         self._display_running = False
 
         if self.get_parameter("debug_view").get_parameter_value().bool_value:
+            if not os.environ.get("DISPLAY"):
+                self.get_logger().warn(
+                    "debug_view requested but DISPLAY is not set; no popup will appear"
+                )
             self._display_running = True
             self._display_thread = threading.Thread(
                 target=self._display_worker, daemon=True
@@ -87,7 +98,8 @@ class TargetCV(Node):
             self.get_parameter("start_enabled").get_parameter_value().bool_value
         )
         self.get_logger().info(
-            f"TargetCV node started — listening on '{self._image_topic}'"
+            "TargetCV node started — listening on "
+            f"'{self._image_topic}' (compressed={self._compressed_input})"
         )
 
         self.timer = self.create_timer(1.0, self._timer_callback)
@@ -123,10 +135,14 @@ class TargetCV(Node):
             return
 
         if enabled:
+            msg_type = CompressedImage if self._compressed_input else Image
+            callback = (
+                self._on_compressed_image if self._compressed_input else self._on_image
+            )
             self._image_sub = self.create_subscription(
-                Image,
+                msg_type,
                 self._image_topic,
-                self._on_image,
+                callback,
                 qos_profile_sensor_data,
             )
             self._enabled = True
@@ -210,28 +226,28 @@ class TargetCV(Node):
     def _normalize_offset(pixel_value: int, frame_extent: int) -> float:
         return ((float(pixel_value) / float(frame_extent)) * 2.0) - 1.0
 
-    def _on_image(self, msg: Image) -> None:
-        if self._image_size != (msg.width, msg.height):
-            self._image_size = (msg.width, msg.height)
+    def _process_frame(
+        self,
+        frame: np.ndarray,
+        header,
+        width: int,
+        height: int,
+    ) -> None:
+        if self._image_size != (width, height):
+            self._image_size = (width, height)
             dims = PointStamped()
             dims.header.stamp = self.get_clock().now().to_msg()
             dims.header.frame_id = "camera"
-            dims.point.x = float(msg.width)
-            dims.point.y = float(msg.height)
+            dims.point.x = float(width)
+            dims.point.y = float(height)
             dims.point.z = 0.0
             self._image_size_pub.publish(dims)
-            self.get_logger().info(f"Image size: {msg.width}x{msg.height}")
-
-        try:
-            frame = self._imgmsg_to_cv2(msg)
-        except Exception as exc:
-            self.get_logger().warn(f"Image conversion error: {exc}")
-            return
+            self.get_logger().info(f"Image size: {width}x{height}")
 
         annotated, center, area = self._detect_target_center_moments(frame)
         self._annotated_pub.publish(
             Image(
-                header=msg.header,
+                header=header,
                 height=annotated.shape[0],
                 width=annotated.shape[1],
                 encoding="bgr8",
@@ -242,8 +258,8 @@ class TargetCV(Node):
 
         if center is not None:
             center_x, center_y = center
-            x_norm = self._normalize_offset(center_x, msg.width)
-            y_norm = self._normalize_offset(center_y, msg.height)
+            x_norm = self._normalize_offset(center_x, width)
+            y_norm = self._normalize_offset(center_y, height)
             det = PointStamped()
             det.header.stamp = self.get_clock().now().to_msg()
             det.header.frame_id = "camera"
@@ -261,6 +277,23 @@ class TargetCV(Node):
                 self._display_queue.put_nowait(annotated)
             except queue.Full:
                 pass
+
+    def _on_image(self, msg: Image) -> None:
+        try:
+            frame = self._imgmsg_to_cv2(msg)
+        except Exception as exc:
+            self.get_logger().warn(f"Image conversion error: {exc}")
+            return
+
+        self._process_frame(frame, msg.header, msg.width, msg.height)
+
+    def _on_compressed_image(self, msg: CompressedImage) -> None:
+        data = np.frombuffer(msg.data, dtype=np.uint8)
+        frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        if frame is None:
+            self.get_logger().warn("Compressed image decode failed")
+            return
+        self._process_frame(frame, msg.header, frame.shape[1], frame.shape[0])
 
     def _display_worker(self) -> None:
         while self._display_running:

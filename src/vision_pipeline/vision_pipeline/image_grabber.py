@@ -3,6 +3,7 @@ Arducam Jetson Image Grabber Node (Fully Rectified & Calibrated)
 """
 
 import os
+import threading
 import time
 
 import cv2
@@ -26,6 +27,9 @@ class ImageGrabber(Node):
         self.declare_parameter("shutter_speed", 1000)
         self.declare_parameter("wb_mode", 6)
         self.declare_parameter("image_publishing_rate", 4.0)
+        self.declare_parameter("publish_full_res", False)
+        self.declare_parameter("monitor_width", 960)
+        self.declare_parameter("monitor_height", 540)
         self.declare_parameter("camera_info_file", "arducam_info.yaml")
         self.declare_parameter("enable_timelapse", True)
         self.declare_parameter("save_dir", "/home/nds2/camera_captures_calibrated")
@@ -37,6 +41,9 @@ class ImageGrabber(Node):
         shutter = self.get_parameter("shutter_speed").value
         wb = self.get_parameter("wb_mode").value
         yaml_file = self.get_parameter("camera_info_file").value
+        self._publish_full_res = self.get_parameter("publish_full_res").value
+        self._monitor_width = self.get_parameter("monitor_width").value
+        self._monitor_height = self.get_parameter("monitor_height").value
 
         self._enable_timelapse = self.get_parameter("enable_timelapse").value
         self._save_dir = self.get_parameter("save_dir").value
@@ -58,6 +65,7 @@ class ImageGrabber(Node):
             raise RuntimeError(
                 "❌ Camera failed to initialize — check GStreamer pipeline."
             )
+        self._camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         # ------------------------------------------------------------------
         # QoS: BEST_EFFORT + depth=1 so Foxglove always gets the newest frame.
@@ -72,6 +80,16 @@ class ImageGrabber(Node):
         self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
         self._info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", qos)
         self._monitor_pub = self.create_publisher(Image, "/camera/image_monitor", qos)
+
+        self._latest_raw_frame = None
+        self._frame_lock = threading.Lock()
+        self._capture_running = True
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop,
+            name="image_grabber_capture",
+            daemon=True,
+        )
+        self._capture_thread.start()
 
         rate = self.get_parameter("image_publishing_rate").value
         self._timer = self.create_timer(1.0 / max(rate, 1.0), self._on_timer)
@@ -89,6 +107,8 @@ class ImageGrabber(Node):
             f"   Resolution : {self.width}x{self.height}\n"
             f"   Sensor FPS : {fps}\n"
             f"   Publish Hz : {rate}\n"
+            f"   Full-res   : {self._publish_full_res}\n"
+            f"   Monitor    : {self._monitor_width}x{self._monitor_height}\n"
             f"   QoS        : BEST_EFFORT depth=1\n"
             f"   Timelapse  : {self._enable_timelapse} "
             f"(every {self._save_interval}s → {self._save_dir})"
@@ -193,26 +213,41 @@ class ImageGrabber(Node):
             f"video/x-raw(memory:NVMM), width={width}, height={height}, "
             f"format=NV12, framerate={fps}/1 ! "
             f"nvvidconv ! video/x-raw, format=BGRx ! "
-            f"videoconvert ! video/x-raw, format=BGR ! appsink drop=1"
+            f"videoconvert ! video/x-raw, format=BGR ! "
+            f"appsink drop=1 max-buffers=1 sync=false"
         )
         self.get_logger().info(f"🎬 GStreamer pipeline:\n   {pipeline}")
         return pipeline
 
     # ------------------------------------------------------------------
-    # Timer callback
+    # Capture / publish
     # ------------------------------------------------------------------
 
-    def _on_timer(self) -> None:
-        try:
+    def _capture_loop(self) -> None:
+        while self._capture_running:
             success, raw_frame = self._camera.read()
             if not success:
                 self._frames_read_failed += 1
+                time.sleep(0.01)
+                continue
+
+            with self._frame_lock:
+                self._latest_raw_frame = raw_frame
+
+    def _on_timer(self) -> None:
+        try:
+            with self._frame_lock:
+                if self._latest_raw_frame is None:
+                    return
+                raw_frame = self._latest_raw_frame.copy()
+
+            if self._frames_read_failed > 0:
                 self.get_logger().warn(
                     f"⚠️  camera.read() returned False "
                     f"(total failures: {self._frames_read_failed}). "
                     "GStreamer pipeline may have stalled."
                 )
-                return
+                self._frames_read_failed = 0
 
             # Rectify (undistort) the raw frame
             frame = cv2.remap(
@@ -221,8 +256,15 @@ class ImageGrabber(Node):
 
             now = self.get_clock().now().to_msg()
 
-            # --- Full-res publish (for YOLO) ---
-            img_msg = self._cv_bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            monitor_frame = cv2.resize(
+                frame,
+                (self._monitor_width, self._monitor_height),
+                interpolation=cv2.INTER_LINEAR,
+            )
+
+            primary_frame = frame if self._publish_full_res else monitor_frame
+
+            img_msg = self._cv_bridge.cv2_to_imgmsg(primary_frame, encoding="bgr8")
             img_msg.header.stamp = now
             img_msg.header.frame_id = "camera_link"
             self._image_pub.publish(img_msg)
@@ -231,10 +273,6 @@ class ImageGrabber(Node):
             self._camera_info_msg.header.stamp = now
             self._info_pub.publish(self._camera_info_msg)
 
-            # --- Monitor stream for Foxglove (960x540, ~26 MB/s at 17Hz) ---
-            monitor_frame = cv2.resize(
-                frame, (960, 540), interpolation=cv2.INTER_LINEAR
-            )
             monitor_msg = self._cv_bridge.cv2_to_imgmsg(monitor_frame, encoding="bgr8")
             monitor_msg.header.stamp = now
             monitor_msg.header.frame_id = "camera_link"
@@ -270,6 +308,13 @@ class ImageGrabber(Node):
                 f"❌ _on_timer exception (timer will continue): {e}"
             )
 
+    def close(self) -> None:
+        self._capture_running = False
+        if hasattr(self, "_capture_thread") and self._capture_thread.is_alive():
+            self._capture_thread.join(timeout=1.0)
+        if hasattr(self, "_camera"):
+            self._camera.release()
+
 
 def main() -> None:
     rclpy.init()
@@ -277,8 +322,7 @@ def main() -> None:
     try:
         rclpy.spin(node)
     finally:
-        if hasattr(node, "_camera"):
-            node._camera.release()
+        node.close()
         node.destroy_node()
         rclpy.shutdown()
 

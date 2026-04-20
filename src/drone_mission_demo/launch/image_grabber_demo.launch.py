@@ -19,6 +19,9 @@ def generate_launch_description() -> LaunchDescription:
                 "image_height": LaunchConfiguration("image_height"),
                 "fps": LaunchConfiguration("fps"),
                 "image_publishing_rate": LaunchConfiguration("image_publishing_rate"),
+                "publish_full_res": LaunchConfiguration("publish_full_res"),
+                "monitor_width": LaunchConfiguration("monitor_width"),
+                "monitor_height": LaunchConfiguration("monitor_height"),
                 "shutter_speed": LaunchConfiguration("shutter_speed"),
                 "wb_mode": LaunchConfiguration("wb_mode"),
                 "camera_info_file": LaunchConfiguration("camera_info_file"),
@@ -53,8 +56,23 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "image_publishing_rate",
-                default_value="15.0",
+                default_value="10.0",
                 description="ROS image publish rate in Hz",
+            ),
+            DeclareLaunchArgument(
+                "publish_full_res",
+                default_value="false",
+                description="Publish the full-resolution frame on the main image topic",
+            ),
+            DeclareLaunchArgument(
+                "monitor_width",
+                default_value="960",
+                description="Width of the low-latency published stream",
+            ),
+            DeclareLaunchArgument(
+                "monitor_height",
+                default_value="540",
+                description="Height of the low-latency published stream",
             ),
             DeclareLaunchArgument(
                 "shutter_speed",

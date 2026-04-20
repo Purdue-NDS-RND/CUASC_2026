@@ -12,7 +12,10 @@ def generate_launch_description() -> LaunchDescription:
         executable="image_grabber",
         name="image_grabber",
         output="screen",
-        remappings=[("/camera/image_raw", image_topic)],
+        remappings=[
+            ("/camera/image_raw", image_topic),
+            ("/camera/image_raw/compressed", [image_topic, "/compressed"]),
+        ],
         parameters=[
             {
                 "image_width": LaunchConfiguration("image_width"),
@@ -21,6 +24,10 @@ def generate_launch_description() -> LaunchDescription:
                 "image_publishing_rate": LaunchConfiguration("image_publishing_rate"),
                 "publish_full_res": LaunchConfiguration("publish_full_res"),
                 "publish_monitor_stream": LaunchConfiguration("publish_monitor_stream"),
+                "publish_compressed_stream": LaunchConfiguration(
+                    "publish_compressed_stream"
+                ),
+                "compressed_quality": LaunchConfiguration("compressed_quality"),
                 "monitor_width": LaunchConfiguration("monitor_width"),
                 "monitor_height": LaunchConfiguration("monitor_height"),
                 "shutter_speed": LaunchConfiguration("shutter_speed"),
@@ -69,6 +76,16 @@ def generate_launch_description() -> LaunchDescription:
                 "publish_monitor_stream",
                 default_value="false",
                 description="Also publish the extra monitor image topic",
+            ),
+            DeclareLaunchArgument(
+                "publish_compressed_stream",
+                default_value="true",
+                description="Also publish a JPEG-compressed image topic for remote viewing",
+            ),
+            DeclareLaunchArgument(
+                "compressed_quality",
+                default_value="70",
+                description="JPEG quality for the compressed image topic",
             ),
             DeclareLaunchArgument(
                 "monitor_width",

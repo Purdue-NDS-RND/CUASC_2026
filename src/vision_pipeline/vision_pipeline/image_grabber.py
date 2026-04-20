@@ -13,7 +13,7 @@ from ament_index_python.packages import get_package_share_directory
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 
 
 class ImageGrabber(Node):
@@ -28,6 +28,8 @@ class ImageGrabber(Node):
         self.declare_parameter("image_publishing_rate", 4.0)
         self.declare_parameter("publish_full_res", False)
         self.declare_parameter("publish_monitor_stream", False)
+        self.declare_parameter("publish_compressed_stream", True)
+        self.declare_parameter("compressed_quality", 70)
         self.declare_parameter("monitor_width", 960)
         self.declare_parameter("monitor_height", 540)
         self.declare_parameter("camera_info_file", "arducam_info.yaml")
@@ -43,6 +45,10 @@ class ImageGrabber(Node):
         yaml_file = self.get_parameter("camera_info_file").value
         self._publish_full_res = self.get_parameter("publish_full_res").value
         self._publish_monitor_stream = self.get_parameter("publish_monitor_stream").value
+        self._publish_compressed_stream = self.get_parameter(
+            "publish_compressed_stream"
+        ).value
+        self._compressed_quality = self.get_parameter("compressed_quality").value
         self._monitor_width = self.get_parameter("monitor_width").value
         self._monitor_height = self.get_parameter("monitor_height").value
 
@@ -80,6 +86,13 @@ class ImageGrabber(Node):
         )
         self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
         self._info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", qos)
+        self._compressed_pub = None
+        if self._publish_compressed_stream:
+            self._compressed_pub = self.create_publisher(
+                CompressedImage,
+                "/camera/image_raw/compressed",
+                qos,
+            )
         self._monitor_pub = None
         if self._publish_monitor_stream:
             self._monitor_pub = self.create_publisher(
@@ -105,6 +118,8 @@ class ImageGrabber(Node):
             f"   Sensor FPS : {fps}\n"
             f"   Publish Hz : {rate}\n"
             f"   Full-res   : {self._publish_full_res}\n"
+            f"   Compressed : {self._publish_compressed_stream} "
+            f"(jpeg q={self._compressed_quality})\n"
             f"   Monitor pub: {self._publish_monitor_stream}\n"
             f"   Monitor    : {self._monitor_width}x{self._monitor_height}\n"
             f"   QoS        : BEST_EFFORT depth=1\n"
@@ -255,6 +270,27 @@ class ImageGrabber(Node):
             img_msg.header.stamp = now
             img_msg.header.frame_id = "camera_link"
             self._image_pub.publish(img_msg)
+
+            if self._compressed_pub is not None:
+                ok, encoded = cv2.imencode(
+                    ".jpg",
+                    primary_frame,
+                    [
+                        int(cv2.IMWRITE_JPEG_QUALITY),
+                        int(self._compressed_quality),
+                    ],
+                )
+                if ok:
+                    compressed_msg = CompressedImage()
+                    compressed_msg.header.stamp = now
+                    compressed_msg.header.frame_id = "camera_link"
+                    compressed_msg.format = "jpeg"
+                    compressed_msg.data = encoded.tobytes()
+                    self._compressed_pub.publish(compressed_msg)
+                else:
+                    self.get_logger().warn(
+                        "Failed to JPEG-encode frame for compressed stream"
+                    )
 
             # --- Camera info ---
             self._camera_info_msg.header.stamp = now

@@ -13,8 +13,7 @@ def generate_launch_description() -> LaunchDescription:
         name="image_grabber",
         output="screen",
         remappings=[
-            ("/camera/image_raw", image_topic),
-            ("/camera/image_raw/compressed", [image_topic, "/compressed"]),
+            ("/camera/image_raw/compressed", [image_topic]),
         ],
         parameters=[
             {
@@ -60,12 +59,12 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "fps",
-                default_value="15",
+                default_value="30",
                 description="Camera sensor frame rate",
             ),
             DeclareLaunchArgument(
                 "image_publishing_rate",
-                default_value="5.0",
+                default_value="20",
                 description="ROS image publish rate in Hz",
             ),
             DeclareLaunchArgument(

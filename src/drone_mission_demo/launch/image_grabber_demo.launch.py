@@ -22,6 +22,7 @@ def generate_launch_description() -> LaunchDescription:
                 "image_height": LaunchConfiguration("image_height"),
                 "fps": LaunchConfiguration("fps"),
                 "image_publishing_rate": LaunchConfiguration("image_publishing_rate"),
+                "publish_raw_stream": LaunchConfiguration("publish_raw_stream"),
                 "publish_full_res": LaunchConfiguration("publish_full_res"),
                 "publish_monitor_stream": LaunchConfiguration("publish_monitor_stream"),
                 "publish_compressed_stream": LaunchConfiguration(
@@ -66,6 +67,11 @@ def generate_launch_description() -> LaunchDescription:
                 "image_publishing_rate",
                 default_value="5.0",
                 description="ROS image publish rate in Hz",
+            ),
+            DeclareLaunchArgument(
+                "publish_raw_stream",
+                default_value="false",
+                description="Publish the raw image topic for local consumers",
             ),
             DeclareLaunchArgument(
                 "publish_full_res",

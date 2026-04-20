@@ -26,6 +26,7 @@ class ImageGrabber(Node):
         self.declare_parameter("shutter_speed", 1000)
         self.declare_parameter("wb_mode", 6)
         self.declare_parameter("image_publishing_rate", 4.0)
+        self.declare_parameter("publish_raw_stream", True)
         self.declare_parameter("publish_full_res", False)
         self.declare_parameter("publish_monitor_stream", False)
         self.declare_parameter("publish_compressed_stream", True)
@@ -43,6 +44,7 @@ class ImageGrabber(Node):
         shutter = self.get_parameter("shutter_speed").value
         wb = self.get_parameter("wb_mode").value
         yaml_file = self.get_parameter("camera_info_file").value
+        self._publish_raw_stream = self.get_parameter("publish_raw_stream").value
         self._publish_full_res = self.get_parameter("publish_full_res").value
         self._publish_monitor_stream = self.get_parameter("publish_monitor_stream").value
         self._publish_compressed_stream = self.get_parameter(
@@ -84,7 +86,9 @@ class ImageGrabber(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=1,
         )
-        self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
+        self._image_pub = None
+        if self._publish_raw_stream:
+            self._image_pub = self.create_publisher(Image, "/camera/image_raw", qos)
         self._info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", qos)
         self._compressed_pub = None
         if self._publish_compressed_stream:
@@ -117,6 +121,7 @@ class ImageGrabber(Node):
             f"   Resolution : {self.width}x{self.height}\n"
             f"   Sensor FPS : {fps}\n"
             f"   Publish Hz : {rate}\n"
+            f"   Raw stream : {self._publish_raw_stream}\n"
             f"   Full-res   : {self._publish_full_res}\n"
             f"   Compressed : {self._publish_compressed_stream} "
             f"(jpeg q={self._compressed_quality})\n"
@@ -266,10 +271,11 @@ class ImageGrabber(Node):
 
             primary_frame = frame if self._publish_full_res else monitor_frame
 
-            img_msg = self._cv_bridge.cv2_to_imgmsg(primary_frame, encoding="bgr8")
-            img_msg.header.stamp = now
-            img_msg.header.frame_id = "camera_link"
-            self._image_pub.publish(img_msg)
+            if self._image_pub is not None:
+                img_msg = self._cv_bridge.cv2_to_imgmsg(primary_frame, encoding="bgr8")
+                img_msg.header.stamp = now
+                img_msg.header.frame_id = "camera_link"
+                self._image_pub.publish(img_msg)
 
             if self._compressed_pub is not None:
                 ok, encoded = cv2.imencode(

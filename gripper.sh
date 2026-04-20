@@ -11,11 +11,11 @@ if [[ $# -ne 1 ]]; then
 fi
 
 case "$1" in
-    release)
+    release|open)
         action_name="release"
         action_value="0.0"  # GRIPPER_ACTION_RELEASE
         ;;
-    grab)
+    grab|close)
         action_name="grab"
         action_value="1.0"  # GRIPPER_ACTION_GRAB
         ;;

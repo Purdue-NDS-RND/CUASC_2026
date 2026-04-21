@@ -59,12 +59,12 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "fps",
-                default_value="30",
+                default_value="15",
                 description="Camera sensor frame rate",
             ),
             DeclareLaunchArgument(
                 "image_publishing_rate",
-                default_value="20",
+                default_value="15.0",
                 description="ROS image publish rate in Hz",
             ),
             DeclareLaunchArgument(

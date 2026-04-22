@@ -174,9 +174,14 @@ class TargetCV(Node):
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         blur = cv2.GaussianBlur(hsv, (5, 5), 0)
 
-        lower_red1 = np.array([0, 70, 50])
+        #lower_red1 = np.array([0, 70, 50])
+        #upper_red1 = np.array([10, 255, 255])
+        #lower_red2 = np.array([170, 70, 50])
+        #upper_red2 = np.array([180, 255, 255])
+
+        lower_red1 = np.array([0, 120, 80])
         upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 70, 50])
+        lower_red2 = np.array([170, 120, 80])
         upper_red2 = np.array([180, 255, 255])
 
         mask1 = cv2.inRange(blur, lower_red1, upper_red1)

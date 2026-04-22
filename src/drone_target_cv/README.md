@@ -12,6 +12,21 @@ These were split from `vision_pipeline` so mission-demo launch files can depend
 on a narrower CV package while the older vision stack remains available during
 the transition.
 
+## USB Camera Prerequisites
+
+On a Jetson or other Ubuntu/Linux ROS2 machine, install the basic USB camera
+capture dependencies with:
+
+```bash
+sudo apt update
+sudo apt install python3-opencv python3-numpy v4l-utils
+```
+
+These provide:
+- `python3-opencv` for `cv2.VideoCapture(...)`
+- `python3-numpy` for image buffer handling
+- `v4l-utils` for tools like `v4l2-ctl` when checking formats and devices
+
 `usb_grabber` is the simple OpenCV USB-camera path. It publishes:
 - `/camera/image/compressed`
 - `/camera/camera_info`

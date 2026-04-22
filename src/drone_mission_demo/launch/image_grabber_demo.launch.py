@@ -59,7 +59,7 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "fps",
-                default_value="15",
+                default_value="15.0",
                 description="Camera sensor frame rate",
             ),
             DeclareLaunchArgument(

@@ -10,7 +10,9 @@ Publishes:
                                                           target offsets in [-1, 1]
   /drone_package_drop/image_size        (PointStamped)  - raw image width/height
                                                           for observability/debugging
-  /drone_package_drop/debug_image       (sensor_msgs/Image) - annotated debug stream
+  /target_cv/annotated                  (sensor_msgs/Image) - annotated debug stream
+                                                              when debug_view=True
+  /target_cv/mask                       (sensor_msgs/Image) - cleaned red mask as mono8
                                                               when debug_view=True
 
 The detection uses a simple HSV colour filter. Tune the HSV bounds
@@ -19,7 +21,7 @@ via parameters to match whatever colour your ground target is.
 Parameters:
   image_topic       Camera topic name            (default "camera/image")
   compressed_input  Subscribe to CompressedImage instead of Image
-  debug_view        Publish a debug image stream (default False)
+  debug_view        Publish annotated and mask debug streams (default False)
 """
 
 import cv2
@@ -67,10 +69,14 @@ class TargetCV(Node):
         self._debug_enabled = (
             self.get_parameter("debug_view").get_parameter_value().bool_value
         )
-        self._debug_image_pub = None
+        self._annotated_pub = None
+        self._mask_pub = None
         if self._debug_enabled:
-            self._debug_image_pub = self.create_publisher(
-                Image, "/drone_package_drop/debug_image", 10
+            self._annotated_pub = self.create_publisher(
+                Image, "/target_cv/annotated", 10
+            )
+            self._mask_pub = self.create_publisher(
+                Image, "/target_cv/mask", 10
             )
 
         self._image_size: tuple[int, int] | None = None
@@ -180,10 +186,11 @@ class TargetCV(Node):
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel)
+        clean = cv2.GaussianBlur(clean, (5, 5), 0)
 
         moments = cv2.moments(clean)
         if moments["m00"] == 0:
-            return annotated, None, None
+            return annotated, clean, None, None
 
         center_x = int(moments["m10"] / moments["m00"])
         center_y = int(moments["m01"] / moments["m00"])
@@ -199,7 +206,7 @@ class TargetCV(Node):
         )
         cv2.circle(annotated, (center_x, center_y), 5, (0, 0, 255), -1)
 
-        return annotated, (center_x, center_y), area
+        return annotated, clean, (center_x, center_y), area
 
     @staticmethod
     def _normalize_offset(pixel_value: int, frame_extent: int) -> float:
@@ -223,17 +230,32 @@ class TargetCV(Node):
             self._image_size_pub.publish(dims)
             self.get_logger().info(f"Image size: {width}x{height}")
 
-        annotated, center, area = self._detect_target_center_moments(frame)
+        annotated, clean_mask, center, area = self._detect_target_center_moments(frame)
 
-        if self._debug_image_pub is not None:
-            self._debug_image_pub.publish(
+        if self._annotated_pub is not None:
+            annotated = np.ascontiguousarray(annotated)
+            self._annotated_pub.publish(
                 Image(
                     header=header,
                     height=annotated.shape[0],
                     width=annotated.shape[1],
                     encoding="bgr8",
                     is_bigendian=0,
+                    step=annotated.strides[0],
                     data=annotated.tobytes(),
+                )
+            )
+        if self._mask_pub is not None:
+            clean_mask = np.ascontiguousarray(clean_mask)
+            self._mask_pub.publish(
+                Image(
+                    header=header,
+                    height=clean_mask.shape[0],
+                    width=clean_mask.shape[1],
+                    encoding="mono8",
+                    is_bigendian=0,
+                    step=clean_mask.strides[0],
+                    data=clean_mask.tobytes(),
                 )
             )
 

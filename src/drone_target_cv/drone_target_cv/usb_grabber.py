@@ -19,6 +19,8 @@ class USBGrabber(Node):
         )
         self.declare_parameter("image_width", 1280)
         self.declare_parameter("image_height", 720)
+        self.declare_parameter("publish_width", 640)
+        self.declare_parameter("publish_height", 360)
         self.declare_parameter("fps", 30.0)
         self.declare_parameter("image_publishing_rate", 30.0)
         self.declare_parameter("frame_id", "camera_link")
@@ -29,6 +31,8 @@ class USBGrabber(Node):
         self._device_path = str(self.get_parameter("device_path").value)
         self._width = int(self.get_parameter("image_width").value)
         self._height = int(self.get_parameter("image_height").value)
+        self._publish_width = int(self.get_parameter("publish_width").value)
+        self._publish_height = int(self.get_parameter("publish_height").value)
         self._fps = float(self.get_parameter("fps").value)
         self._publish_rate = float(self.get_parameter("image_publishing_rate").value)
         self._frame_id = str(self.get_parameter("frame_id").value)
@@ -97,7 +101,8 @@ class USBGrabber(Node):
             f"   Device     : {self._device_path}\n"
             f"   Resolved   : {self._resolved_device_path}\n"
             f"   Backend    : {backend_name}\n"
-            f"   Resolution : {actual_width}x{actual_height}\n"
+            f"   Capture Res: {actual_width}x{actual_height}\n"
+            f"   Publish Res: {self._publish_width}x{self._publish_height}\n"
             f"   Sensor FPS : {actual_fps}\n"
             f"   Publish Hz : {self._publish_rate}\n"
             f"   Frame ID   : {self._frame_id}\n"
@@ -156,6 +161,16 @@ class USBGrabber(Node):
 
         if frame is None:
             return
+
+        if (
+            frame.shape[1] != self._publish_width
+            or frame.shape[0] != self._publish_height
+        ):
+            frame = cv2.resize(
+                frame,
+                (self._publish_width, self._publish_height),
+                interpolation=cv2.INTER_AREA,
+            )
 
         now = self.get_clock().now().to_msg()
         if self._image_pub is not None:

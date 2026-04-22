@@ -15,6 +15,8 @@ def generate_launch_description() -> LaunchDescription:
                 "device_path": LaunchConfiguration("device_path"),
                 "image_width": LaunchConfiguration("image_width"),
                 "image_height": LaunchConfiguration("image_height"),
+                "publish_width": LaunchConfiguration("publish_width"),
+                "publish_height": LaunchConfiguration("publish_height"),
                 "fps": LaunchConfiguration("fps"),
                 "image_publishing_rate": LaunchConfiguration("image_publishing_rate"),
                 "frame_id": LaunchConfiguration("frame_id"),
@@ -41,6 +43,16 @@ def generate_launch_description() -> LaunchDescription:
                 "image_height",
                 default_value="720",
                 description="Requested USB camera image height in pixels",
+            ),
+            DeclareLaunchArgument(
+                "publish_width",
+                default_value="640",
+                description="Published image width in pixels after resize",
+            ),
+            DeclareLaunchArgument(
+                "publish_height",
+                default_value="360",
+                description="Published image height in pixels after resize",
             ),
             DeclareLaunchArgument(
                 "fps",

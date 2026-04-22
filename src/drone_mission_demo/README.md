@@ -47,7 +47,7 @@ Defined in `drone_mission_demo/missions/`:
 `launch/package_drop_demo.launch.py` starts the shared vision-guided delivery stack:
 - `simple_takeoff_service` from `drone_utils`
 - `gimbal_point_service` from `drone_utils`
-- `target_cv` from `vision_pipeline`
+- `target_cv` from `drone_target_cv`
 - `mission_executor` from `drone_mission_core`
 
 `launch/package_delivery_demo.launch.py` starts the same stack but defaults to the package-delivery sequence.

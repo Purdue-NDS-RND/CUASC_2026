@@ -8,7 +8,7 @@ def generate_launch_description() -> LaunchDescription:
     image_topic = LaunchConfiguration("image_topic")
 
     image_grabber_node = Node(
-        package="vision_pipeline",
+        package="drone_target_cv",
         executable="compressed_grabber",
         name="image_grabber",
         output="screen",
@@ -115,7 +115,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "camera_info_file",
                 default_value="arducam_info.yaml",
-                description="Camera calibration YAML in vision_pipeline/config",
+                description="Camera calibration YAML in drone_target_cv/config",
             ),
             DeclareLaunchArgument(
                 "enable_timelapse",

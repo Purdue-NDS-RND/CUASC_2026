@@ -1,23 +1,23 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>drone_mission_demo</name>
+  <name>drone_target_cv</name>
   <version>0.0.0</version>
-  <description>Example missions and configs built on top of drone_mission_core.</description>
+  <description>Target CV nodes split out from vision_pipeline for mission demos.</description>
   <maintainer email="pate2293@purdue.edu">ppatel</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>mavros_msgs</exec_depend>
-  <exec_depend>drone_utils</exec_depend>
-  <exec_depend>drone_mission_core</exec_depend>
-  <exec_depend>drone_target_cv</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
 
   <test_depend>ament_copyright</test_depend>

@@ -126,9 +126,7 @@ class MissionLogger(Node):
         self.create_subscription(
             CameraInfo, "/camera/camera_info", self._on_camera_info, qos_profile
         )
-        self.create_subscription(
-            Image, "/camera/image_raw", self._on_every_frame, qos_profile
-        )
+
         self.create_subscription(
             PoseStamped,
             "/mavros/local_position/pose",
@@ -150,11 +148,16 @@ class MissionLogger(Node):
         img_sub = message_filters.Subscriber(
             self, Image, "/camera/image_raw", qos_profile=qos_profile
         )
+        img_sub.registerCallback(self._on_every_frame)
 
-        det_sub = message_filters.Subscriber(
-            self, Detection2DArray, "/drone_control/detection"
+        det_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
         )
-
+        det_sub = message_filters.Subscriber(
+            self, Detection2DArray, "/drone_control/detection", qos_profile=det_qos
+        )
         # THE FIX: Use ExactTimeSynchronizer and a massive queue!
         # queue_size=60 gives the logger ~3.5 seconds of memory at 17 FPS.
         self.ts = message_filters.TimeSynchronizer([img_sub, det_sub], queue_size=60)
@@ -232,7 +235,7 @@ class MissionLogger(Node):
         self._pose_history.append(msg)
 
         # Log pose at most once per second so terminal isn't flooded
-        now = time.time()
+        now = self.get_clock().now().nanoseconds / 1e9
         if now - self._last_pose_log_time >= 1.0:
             p = msg.pose.position
             q = msg.pose.orientation
@@ -317,6 +320,10 @@ class MissionLogger(Node):
             return
 
         for det_idx, det in enumerate(det_array_msg.detections):
+            if not det.results:
+                self.get_logger().warn("Detection has no results — skipping")
+                continue
+
             u = det.bbox.center.position.x
             v = det.bbox.center.position.y
             confidence = det.results[0].hypothesis.score

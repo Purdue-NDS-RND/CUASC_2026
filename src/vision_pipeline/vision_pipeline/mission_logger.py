@@ -157,9 +157,7 @@ class MissionLogger(Node):
 
         # THE FIX: Use ExactTimeSynchronizer and a massive queue!
         # queue_size=60 gives the logger ~3.5 seconds of memory at 17 FPS.
-        self.ts = message_filters.ExactTimeSynchronizer(
-            [img_sub, det_sub], queue_size=60
-        )
+        self.ts = message_filters.TimeSynchronizer([img_sub, det_sub], queue_size=60)
         self.ts.registerCallback(self._on_synced_data)
 
         # Periodic readiness check timer — fires every 3s until system is ready

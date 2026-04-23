@@ -1,0 +1,26 @@
+mission_sequence:
+    on_failure: abort_and_rtl
+    missions:
+        # 1. Takeoff to 30 meters
+        - type: takeoff
+          name: takeoff_to_survey_height
+          config:
+              target_altitude_m: 30.0
+
+        # 2. Run your custom lawnmower mission
+        - type: object_localization_survey
+          name: competition_field_search
+          config:
+              altitude_m: 25.0
+              spacing_m: 28.0 # Distance between flight sweeps
+              corners:
+                  - [40.4276, -86.9290] # Bottom Left
+                  - [40.4276, -86.9284] # Bottom Right
+                  - [40.4280, -86.9290] # Top Left
+                  - [40.4280, -86.9284] # Top Right
+
+        # 3. Come home and land
+        - type: rtl
+          name: return_to_launch
+          config:
+              rtl_mode: "RTL"

@@ -65,8 +65,6 @@ class RedBullseyeMissionBase(BaseMission):
         )
         self._max_recovery_attempts = int(config.get("max_recovery_attempts", 3))
         self._centering_dwell_s = float(config.get("centering_dwell_s", 1.0))
-        self._servo_channel = int(config.get("servo_channel", 9))
-        self._servo_open_pwm = int(config.get("servo_open_pwm", 1900))
         self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
         self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
         self._enable_gimbal_pointing = bool(
@@ -110,7 +108,7 @@ class RedBullseyeMissionBase(BaseMission):
 
     def _initialize_common_vision_state(self) -> None:
         self._gimbal_requested = False
-        self._servo_requested = False
+        self._actuator_requested = False
         self._recovery_attempts = 0
         self._centering_dwell_start: Time | None = None
         self._target_loss_start: Time | None = None

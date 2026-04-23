@@ -424,18 +424,17 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
                 self._delivery_complete = True
 
         if not self._delivery_complete and not self._fake_drop:
-            if self._servo_requested:
+            if self._actuator_requested:
                 pass
             elif not context.command_service_ready():
                 return MissionStatus.WAITING
             else:
-                context.logger.info(f"[{self.name}] Delivering payload")
-                context.actuate_servo(
-                    self._servo_channel,
-                    self._servo_open_pwm,
-                    self._on_servo_response,
+                context.logger.info(f"[{self.name}] Releasing gripper payload")
+                context.command_gripper(
+                    release=True,
+                    done_callback=self._on_gripper_response,
                 )
-                self._servo_requested = True
+                self._actuator_requested = True
 
         if context.seconds_since(self._ground_dwell_start) < self._delivery_dwell_s:
             return MissionStatus.RUNNING
@@ -474,8 +473,8 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
     def _handle_invalid_state(self, _context: MissionContext) -> MissionStatus:
         return MissionStatus.FAILURE
 
-    def _on_servo_response(self, future) -> None:
-        self._servo_requested = False
+    def _on_gripper_response(self, future) -> None:
+        self._actuator_requested = False
         try:
             result = future.result()
             if result is not None and result.success:

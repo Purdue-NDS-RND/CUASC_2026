@@ -132,16 +132,35 @@ class MissionContext:
             future.add_done_callback(done_callback)
         return future
 
-    def actuate_servo(
+    def command_gripper(
         self,
-        channel: int,
-        pwm: int,
+        *,
+        release: bool,
         done_callback: Callable[[Future[Any]], None] | None = None,
     ) -> Future[Any]:
         request = CommandLong.Request()
-        request.command = 183
-        request.param1 = float(channel)
-        request.param2 = float(pwm)
+        request.broadcast = False
+        request.command = 211
+        request.confirmation = 0
+        request.param1 = 1.0
+        request.param2 = 0.0 if release else 1.0
+        future = self._node._command_client.call_async(request)
+        if done_callback is not None:
+            future.add_done_callback(done_callback)
+        return future
+
+    def command_sprayer(
+        self,
+        *,
+        enable: bool,
+        done_callback: Callable[[Future[Any]], None] | None = None,
+    ) -> Future[Any]:
+        request = CommandLong.Request()
+        request.broadcast = False
+        request.command = 216
+        request.confirmation = 0
+        request.param1 = 1.0 if enable else 0.0
+        request.param2 = 0.0
         future = self._node._command_client.call_async(request)
         if done_callback is not None:
             future.add_done_callback(done_callback)

@@ -6,32 +6,29 @@ mission_sequence:
       config:
         target_altitude_m: 15.0                    # Target climb altitude after takeoff in meters.
 
-    - type: package_delivery                       # Vision-guided touch-and-go delivery mission.
-      name: package_delivery                       # Human-readable mission instance name for logs.
+    - type: package_drop                           # Vision-guided package-drop mission.
+      name: package_drop                           # Human-readable mission instance name for logs.
       failure_policy: continue_to_next             # Keep the sequence running after this mission fails.
       config:
-        target_latitude: -35.3631271               # GPS latitude of the delivery target.
-        target_longitude: 149.1653479              # GPS longitude of the delivery target.
+        # Live-flight template: edit these coordinates before real flight.
+        # The copied defaults below are inherited from the simulation demo and
+        # are not safe operating coordinates on a real field.
+        target_latitude: -35.3631271               # GPS latitude of the drop target.
+        target_longitude: 149.1653479              # GPS longitude of the drop target.
         transit_altitude_m: 15.0                   # Cruise altitude used while flying to the target area.
-        landing_check_threshold_m: 6.0             # Altitude where delivery switches to touchdown logic.
-        touchdown_handoff_tolerance_m: 0.2         # Separate altitude tolerance for the final fixed-column handoff.
-        relaunch_altitude_m: 12.0                  # Altitude to climb back to after delivery is complete.
-        fake_drop: true                            # Simulate payload delivery without releasing the gripper actuator.
-        descent_rate_mps: 0.35                     # Normal descent speed while centered over the target.
-        final_descent_rate_mps: 0.25               # Slower descent speed near touchdown.
-        delivery_dwell_s: 5.0                      # Time to remain on the ground before relaunch.
-        guided_relaunch_rate_mps: 0.6              # Commanded climb rate for guided relaunch.
-        guided_relaunch_max_climb_rate_mps: 2.5    # Maximum climb rate clamp during relaunch.
+        drop_altitude_m: 4.0                       # Target altitude for the package release.
+        fake_drop: true                            # Simulate payload release without opening the sprayer actuator.
+        descent_rate_mps: 0.35                     # Descent speed while centered over the target.
         camera_fx_px: 2334.99647                   # Camera focal length in pixels along the x-axis.
         camera_fy_px: 2338.06625                   # Camera focal length in pixels along the y-axis.
         camera_calibration_width_px: 3840.0        # Image width used when the camera intrinsics were calibrated.
         camera_calibration_height_px: 2160.0       # Image height used when the camera intrinsics were calibrated.
         camera_yaw_offset_deg: 0.0                 # Fixed yaw rotation between the camera and vehicle body.
-        centering_tolerance_m: 0.20                # Ground-error threshold considered centered enough to descend.
+        centering_tolerance_m: 0.22                # Ground-error threshold considered centered enough to descend.
         centering_deadband_m: 0.08                 # Small projected errors below this are treated as zero.
-        tracking_low_pass_alpha: 0.20              # Low-pass filter weight; higher values react faster but noisier.
+        tracking_low_pass_alpha: 0.22              # Low-pass filter weight; higher values react faster but noisier.
         centering_gain_mps_per_m: 0.40             # XY velocity gain applied to projected ground error.
-        max_centering_speed_mps: 0.60              # Maximum commanded lateral tracking speed.
+        max_centering_speed_mps: 1.0               # Maximum commanded lateral tracking speed.
         arrival_radius_m: 3.0                      # Horizontal GPS radius used to declare arrival at the target area.
         arrival_alt_tolerance_m: 2.0               # Altitude tolerance used when checking target heights.
         not_found_ascent_m: 3.0                    # Climb amount per retry when the visual target is lost.
@@ -39,8 +36,8 @@ mission_sequence:
         max_recovery_attempts: 10                  # Maximum number of visual reacquisition attempts.
         min_projection_altitude_m: 0.75            # Minimum altitude where ground projection is considered valid.
         max_projection_distance_m: 25.0            # Reject projected detections farther than this from the drone.
-        centering_dwell_s: 1.0                     # Time to remain centered before committing to the next phase.
-        touchdown_dwell_s: 0.5                     # Debounce time for landed-state confirmation.
+        centering_dwell_s: 1.0                     # Time to remain centered before committing to the drop phase.
+        drop_hover_dwell_s: 8.0                    # Hover time at drop altitude before releasing the payload.
         enable_gimbal_pointing: false              # If true, command the gimbal toward the configured angles.
         gimbal_pitch_deg: -90.0                    # Desired gimbal pitch angle in degrees.
         gimbal_yaw_deg: 0.0                        # Desired gimbal yaw angle in degrees.

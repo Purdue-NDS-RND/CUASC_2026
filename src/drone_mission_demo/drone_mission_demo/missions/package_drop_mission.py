@@ -284,19 +284,18 @@ class PackageDropMission(RedBullseyeMissionBase):
             self._transition_to(PackageDropState.COMPLETE, context)
             return MissionStatus.SUCCESS
 
-        if self._servo_requested:
+        if self._actuator_requested:
             return MissionStatus.RUNNING
 
         if not context.command_service_ready():
             return MissionStatus.WAITING
 
-        context.logger.info(f"[{self.name}] Releasing payload")
-        context.actuate_servo(
-            self._servo_channel,
-            self._servo_open_pwm,
-            self._on_servo_response,
+        context.logger.info(f"[{self.name}] Opening sprayer for payload drop")
+        context.command_sprayer(
+            enable=True,
+            done_callback=self._on_sprayer_response,
         )
-        self._servo_requested = True
+        self._actuator_requested = True
         return MissionStatus.RUNNING
 
     def _handle_complete(self, _context: MissionContext) -> MissionStatus:
@@ -305,8 +304,8 @@ class PackageDropMission(RedBullseyeMissionBase):
     def _handle_invalid_state(self, _context: MissionContext) -> MissionStatus:
         return MissionStatus.FAILURE
 
-    def _on_servo_response(self, future) -> None:
-        self._servo_requested = False
+    def _on_sprayer_response(self, future) -> None:
+        self._actuator_requested = False
         try:
             result = future.result()
             if result is not None and result.success:

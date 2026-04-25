@@ -46,7 +46,6 @@ Defined in `drone_mission_core/mission_context.py`.
 - local position setpoint management
 - global GPS setpoint management
 - local velocity setpoint management
-- gimbal point requests
 - gripper / sprayer actuator requests through MAVROS `CommandLong`
 - mode changes such as `RTL`
 
@@ -87,7 +86,6 @@ Responsibilities:
 | `drone_utils/takeoff` | `mavros_msgs/CommandTOL` | Shared takeoff sequence |
 | `/mavros/set_mode` | `mavros_msgs/SetMode` | Mode changes such as `RTL` |
 | `/mavros/cmd/command` | `mavros_msgs/CommandLong` | Shared gripper / sprayer actuator commands |
-| `drone_utils/set_gimbal_point` | `mavros_msgs/GimbalManagerPitchyaw` | Shared gimbal pointing requests |
 | `/drone_package_drop/set_target_cv_enabled` | `std_srvs/SetBool` | Enable or disable target detection work |
 
 ## Sequence YAML Shape

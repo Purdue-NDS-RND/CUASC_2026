@@ -46,7 +46,6 @@ Defined in `drone_mission_demo/missions/`:
 
 `launch/package_drop_demo.launch.py` starts the shared vision-guided delivery stack:
 - `simple_takeoff_service` from `drone_utils`
-- `gimbal_point_service` from `drone_utils`
 - `target_cv` from `drone_target_cv`
 - `mission_executor` from `drone_mission_core`
 
@@ -98,7 +97,8 @@ It:
 `PackageDropMission` owns a vision-guided drop flow:
 
 ```text
-TRANSIT_TO_TARGET -> ACQUIRE_TARGET -> TRACK_AND_DESCEND -> DROP_PAYLOAD
+TRANSIT_TO_TARGET -> ACQUIRE_TARGET -> TRACK_AND_DESCEND
+-> FINAL_FIXED_DROP_COLUMN -> DROP_PAYLOAD
 ```
 
 It:
@@ -107,13 +107,15 @@ It:
 - waits for a stable visual lock from `target_cv`
 - uses centered normalized target offsets from `target_cv` so the XY control law does not depend on camera resolution
 - commands XY correction and vertical descent simultaneously through shared local velocity setpoints
+- holds briefly on target-loss flicker before climbing for recovery
+- freezes the current GPS lat/lon for the final drop column once low and centered
 - bounds target-loss recovery with `max_recovery_altitude_m` and `max_recovery_attempts`
 - supports `fake_drop: true` for simulation-only testing, which still uses GPS transit and vision tracking but skips the real sprayer-open actuation step after the normal drop hover
 - can use `failure_policy: continue_to_next` so a failed drop falls through to the next mission in the sequence
 
 Drop-specific vision tuning keys:
-- `centering_tolerance_norm` — centered-error magnitude in normalized image units required before descent/drop transitions
-- `centering_gain_mps_per_norm` — horizontal velocity gain in m/s per normalized error unit
+- `drop_column_handoff_altitude_m` — altitude below which a centered target commits to a fixed GPS drop column
+- `drop_altitude_tolerance_m` — altitude tolerance for accepting the release height
 
 ## `PackageDeliveryMission` Behavior
 
@@ -206,7 +208,7 @@ Run the live package-delivery stack:
 ros2 launch drone_mission_demo package_delivery_live.launch.py
 ```
 
-The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. They do not start any gimbal service and assume the live camera stays fixed. The live sequence files keep `fake_drop: true` by default and are templates only: edit `target_latitude` and `target_longitude` before real flight.
+The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. They assume the live camera is fixed. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
 
 ## Sequence Example
 

@@ -22,7 +22,7 @@ import scipy.cluster.hierarchy as hcluster
 
 # --- CONFIGURATION ---
 # Make sure to update this path to your exact flight folder!
-FLIGHT_DIR = "/home/spes_ignota/Flight_20260419_162533_copy"
+FLIGHT_DIR = "/home/nds2/CUASC_Mission_Data/Flight_20260424_205344"
 
 INPUT_CSV = os.path.join(FLIGHT_DIR, "mission_log.csv")
 # CHANGED: Look in the targets folder, not the frames folder
@@ -34,7 +34,7 @@ CLUSTERS_DIR = os.path.join(FLIGHT_DIR, "target_clusters")
 SUMMARY_CSV = os.path.join(CLUSTERS_DIR, "cluster_summary.csv")
 ANNOTATION_CSV = os.path.join(CLUSTERS_DIR, "chip_annotations.csv")
 
-TOLERANCE = 4  # Set to 1.0 meters based on your previous request
+TOLERANCE = 5  # Set to 1.0 meters based on your previous request
 R_EARTH = 6378137.0
 
 

@@ -85,7 +85,7 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "device_path",
-                default_value="/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9782_USB_Camera_UC852-video-index0",
+                default_value="/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_12MP_SN0001-video-index0",
                 description="Stable Linux camera path like /dev/v4l/by-id/...",
             ),
             DeclareLaunchArgument(

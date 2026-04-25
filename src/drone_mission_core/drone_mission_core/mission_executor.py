@@ -13,7 +13,7 @@ from mavros_msgs.msg import (
     PositionTarget,
     State,
 )
-from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
+from mavros_msgs.srv import CommandLong, CommandTOL, SetMode
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
@@ -102,10 +102,6 @@ class MissionExecutorNode(Node):
         self._takeoff_client = self.create_client(CommandTOL, "drone_utils/takeoff")
         self._mode_client = self.create_client(SetMode, "/mavros/set_mode")
         self._command_client = self.create_client(CommandLong, "/mavros/cmd/command")
-        self._gimbal_client = self.create_client(
-            GimbalManagerPitchyaw,
-            "drone_utils/set_gimbal_point",
-        )
         self._target_cv_control_client = self.create_client(
             SetBool,
             "/drone_package_drop/set_target_cv_enabled",

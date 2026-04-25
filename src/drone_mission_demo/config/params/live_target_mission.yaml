@@ -24,3 +24,4 @@ target_cv:
     debug_view: true
     start_enabled: false
     compressed_input: true
+    min_target_area_px: 25.0

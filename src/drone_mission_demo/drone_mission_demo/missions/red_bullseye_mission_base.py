@@ -33,6 +33,12 @@ class TrackingVelocityCommand:
     reached_target_altitude: bool
 
 
+@dataclass(frozen=True)
+class RecoveryCommandResult:
+    failed: bool
+    reached_altitude: bool
+
+
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Horizontal distance in meters between two GPS points."""
 
@@ -65,11 +71,6 @@ class RedBullseyeMissionBase(BaseMission):
         )
         self._max_recovery_attempts = int(config.get("max_recovery_attempts", 3))
         self._centering_dwell_s = float(config.get("centering_dwell_s", 1.0))
-        self._gimbal_pitch_deg = float(config.get("gimbal_pitch_deg", -90.0))
-        self._gimbal_yaw_deg = float(config.get("gimbal_yaw_deg", 0.0))
-        self._enable_gimbal_pointing = bool(
-            config.get("enable_gimbal_pointing", True)
-        )
         self._centering_deadband_m = float(config.get("centering_deadband_m", 0.08))
         self._tracking_low_pass_alpha = float(
             config.get("tracking_low_pass_alpha", 0.25)
@@ -104,10 +105,15 @@ class RedBullseyeMissionBase(BaseMission):
             config.get("max_projection_distance_m", 25.0)
         )
         self._target_timeout_s = float(config.get("target_timeout_s", 2.0))
+        self._target_loss_grace_s = float(
+            config.get("target_loss_grace_s", self._target_timeout_s)
+        )
+        self._recovery_alt_tolerance_m = float(
+            config.get("recovery_alt_tolerance_m", self._arrival_alt_tolerance_m)
+        )
         self._failed = self._target_latitude == 0.0 and self._target_longitude == 0.0
 
     def _initialize_common_vision_state(self) -> None:
-        self._gimbal_requested = False
         self._actuator_requested = False
         self._recovery_attempts = 0
         self._centering_dwell_start: Time | None = None
@@ -260,6 +266,89 @@ class RedBullseyeMissionBase(BaseMission):
         )
         return filtered_error_m, velocity_east, velocity_north
 
+    def _target_loss_grace_expired(self, context: MissionContext) -> bool:
+        if self._target_loss_start is None:
+            self._target_loss_start = context.now()
+            context.logger.warn(
+                f"[{self.name}] Target tracking lost; holding for "
+                f"{self._target_loss_grace_s:.1f} s before recovery"
+            )
+            return False
+        return context.seconds_since(self._target_loss_start) >= self._target_loss_grace_s
+
+    def _clear_target_loss_grace(self) -> None:
+        self._target_loss_start = None
+
+    def _hold_tracking_loss_grace(self, context: MissionContext) -> bool:
+        self._reset_tracking_filter()
+        context.set_local_velocity_setpoint(
+            0.0,
+            0.0,
+            0.0,
+            yaw_deg=HOLD_YAW_DEG,
+        )
+        self._log_velocity_command(
+            context,
+            east_mps=0.0,
+            north_mps=0.0,
+            up_mps=0.0,
+        )
+        return self._target_loss_grace_expired(context)
+
+    def _update_target_recovery(self, context: MissionContext) -> RecoveryCommandResult:
+        if context.global_gps is None or context.local_pose is None:
+            return RecoveryCommandResult(failed=False, reached_altitude=False)
+
+        if self._recovery_target_altitude is None or self._recovery_hold_position is None:
+            if self._recovery_attempts >= self._max_recovery_attempts:
+                context.logger.error(
+                    f"[{self.name}] Target recovery exceeded "
+                    f"{self._max_recovery_attempts} attempts"
+                )
+                return RecoveryCommandResult(failed=True, reached_altitude=False)
+
+            current_altitude = context.local_pose.pose.position.z
+            next_altitude = current_altitude + self._not_found_ascent_m
+            if (
+                current_altitude >= self._max_recovery_altitude_m
+                or next_altitude > self._max_recovery_altitude_m
+            ):
+                context.logger.error(
+                    f"[{self.name}] Recovery climb would exceed "
+                    f"{self._max_recovery_altitude_m:.1f} m"
+                )
+                return RecoveryCommandResult(failed=True, reached_altitude=False)
+
+            self._recovery_target_altitude = min(
+                next_altitude,
+                self._max_recovery_altitude_m,
+            )
+            self._recovery_hold_position = (
+                context.global_gps.latitude,
+                context.global_gps.longitude,
+            )
+            self._recovery_attempts += 1
+            context.logger.info(
+                f"[{self.name}] Target lost, climbing to "
+                f"{self._recovery_target_altitude:.1f} m "
+                f"(attempt {self._recovery_attempts}/{self._max_recovery_attempts})"
+            )
+
+        context.set_global_position_setpoint(
+            self._recovery_hold_position[0],
+            self._recovery_hold_position[1],
+            self._recovery_target_altitude,
+            yaw_deg=HOLD_YAW_DEG,
+            lock_yaw=True,
+        )
+        altitude_error = abs(
+            context.local_pose.pose.position.z - self._recovery_target_altitude
+        )
+        return RecoveryCommandResult(
+            failed=False,
+            reached_altitude=altitude_error <= self._recovery_alt_tolerance_m,
+        )
+
     def _reset_tracking_filter(self) -> None:
         self._filtered_tracking_east_m = None
         self._filtered_tracking_north_m = None
@@ -306,30 +395,6 @@ class RedBullseyeMissionBase(BaseMission):
             yaw_deg=HOLD_YAW_DEG,
             lock_yaw=True,
         )
-
-    def _request_gimbal_if_ready(self, context: MissionContext) -> None:
-        if not self._enable_gimbal_pointing:
-            return
-        if self._gimbal_requested or not context.gimbal_service_ready():
-            return
-        context.point_gimbal(
-            self._gimbal_pitch_deg,
-            self._gimbal_yaw_deg,
-            self._on_gimbal_response,
-        )
-        self._gimbal_requested = True
-        context.logger.info(
-            f"[{self.name}] Pointing gimbal to "
-            f"pitch={self._gimbal_pitch_deg:.1f}, yaw={self._gimbal_yaw_deg:.1f}"
-        )
-
-    def _on_gimbal_response(self, future) -> None:
-        try:
-            result = future.result()
-            if result is None or not result.success:
-                self._gimbal_requested = False
-        except Exception:
-            self._gimbal_requested = False
 
     def _request_target_cv_enable(self, context: MissionContext) -> None:
         if self._target_cv_enabled or self._target_cv_enable_requested:

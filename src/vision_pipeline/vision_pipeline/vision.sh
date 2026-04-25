@@ -11,7 +11,7 @@ source ~/dev/CUASC_2026/install/setup.bash
 source ~/dev/VTOL-Project/src/yolo_models/yolo_env/bin/activate
 
 # 4. Enforce the PyTorch path (just in case the .bashrc misses it)
-export PYTHONPATH=/home/nds2/dev/VTOL-Project/src/yolo_models/yolo_env/lib/python3.10/site-packages:$PYTHONPATH
+export PYTHONPATH=$HOME/dev/VTOL-Project/src/yolo_models/yolo_env/lib/python3.10/site-packages:$PYTHONPATH
 
 sudo systemctl restart nvargus-daemon
 

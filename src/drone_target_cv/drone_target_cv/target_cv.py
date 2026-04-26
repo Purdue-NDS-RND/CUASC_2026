@@ -43,12 +43,16 @@ class TargetCV(Node):
         self.declare_parameter("compressed_input", False)
         self.declare_parameter("debug_view", False)
         self.declare_parameter("start_enabled", True)
+        self.declare_parameter("min_target_area_px", 25.0)
 
         self._image_topic = (
             self.get_parameter("image_topic").get_parameter_value().string_value
         )
         self._compressed_input = (
             self.get_parameter("compressed_input").get_parameter_value().bool_value
+        )
+        self._min_target_area_px = (
+            self.get_parameter("min_target_area_px").get_parameter_value().double_value
         )
         self._enabled = False
         self._image_sub = None
@@ -169,20 +173,20 @@ class TargetCV(Node):
             return cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
         raise ValueError(f"Unsupported image encoding: {msg.encoding}")
 
-    def _detect_target_center_moments(self, image):
+    def _detect_target_center(self, image):
         annotated = image.copy()
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         blur = cv2.GaussianBlur(hsv, (5, 5), 0)
 
-        #lower_red1 = np.array([0, 70, 50])
-        #upper_red1 = np.array([10, 255, 255])
-        #lower_red2 = np.array([170, 70, 50])
-        #upper_red2 = np.array([180, 255, 255])
-
-        lower_red1 = np.array([0, 120, 80])
+        lower_red1 = np.array([0, 70, 50])
         upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 120, 80])
+        lower_red2 = np.array([170, 70, 50])
         upper_red2 = np.array([180, 255, 255])
+
+        #lower_red1 = np.array([0, 120, 80])
+        #upper_red1 = np.array([10, 255, 255])
+        #lower_red2 = np.array([170, 120, 80])
+        #upper_red2 = np.array([180, 255, 255])
 
         mask1 = cv2.inRange(blur, lower_red1, upper_red1)
         mask2 = cv2.inRange(blur, lower_red2, upper_red2)
@@ -191,15 +195,26 @@ class TargetCV(Node):
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel)
-        clean = cv2.GaussianBlur(clean, (5, 5), 0)
 
-        moments = cv2.moments(clean)
+        contours, _ = cv2.findContours(
+            clean,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
+        if not contours:
+            return annotated, clean, None, None
+
+        largest_contour = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(largest_contour)
+        if area < self._min_target_area_px:
+            return annotated, clean, None, None
+
+        moments = cv2.moments(largest_contour)
         if moments["m00"] == 0:
             return annotated, clean, None, None
 
         center_x = int(moments["m10"] / moments["m00"])
         center_y = int(moments["m01"] / moments["m00"])
-        area = moments["m00"]
 
         cv2.drawMarker(
             annotated,
@@ -210,6 +225,7 @@ class TargetCV(Node):
             thickness=2,
         )
         cv2.circle(annotated, (center_x, center_y), 5, (0, 0, 255), -1)
+        cv2.drawContours(annotated, [largest_contour], -1, (255, 0, 0), 2)
 
         return annotated, clean, (center_x, center_y), area
 
@@ -235,7 +251,7 @@ class TargetCV(Node):
             self._image_size_pub.publish(dims)
             self.get_logger().info(f"Image size: {width}x{height}")
 
-        annotated, clean_mask, center, area = self._detect_target_center_moments(frame)
+        annotated, clean_mask, center, area = self._detect_target_center(frame)
 
         if self._annotated_pub is not None:
             annotated = np.ascontiguousarray(annotated)

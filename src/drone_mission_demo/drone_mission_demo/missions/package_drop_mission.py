@@ -24,6 +24,7 @@ class PackageDropState(Enum):
     ACQUIRE_TARGET = auto()
     TARGET_NOT_FOUND = auto()
     TRACK_AND_DESCEND = auto()
+    FINAL_FIXED_DROP_COLUMN = auto()
     DROP_PAYLOAD = auto()
     COMPLETE = auto()
 
@@ -36,6 +37,12 @@ class PackageDropMission(RedBullseyeMissionBase):
         config = self.spec.config
         self._load_common_vision_config(config)
         self._drop_altitude_m = float(config.get("drop_altitude_m", 5.0))
+        self._drop_altitude_tolerance_m = float(
+            config.get("drop_altitude_tolerance_m", 0.5)
+        )
+        self._drop_column_handoff_altitude_m = float(
+            config.get("drop_column_handoff_altitude_m", 8.0)
+        )
         self._descent_rate_mps = float(config.get("descent_rate_mps", 0.5))
         self._drop_hover_dwell_s = float(config.get("drop_hover_dwell_s", 2.0))
 
@@ -43,6 +50,9 @@ class PackageDropMission(RedBullseyeMissionBase):
         self._initialize_common_vision_state()
         self._drop_actuated = False
         self._drop_hover_start: Time | None = None
+        self._drop_column_hold_position: tuple[float, float] | None = None
+        self._drop_column_target_altitude_m: float | None = None
+        self._drop_column_last_update: Time | None = None
 
         self._enter_common_mission(context)
 
@@ -53,8 +63,6 @@ class PackageDropMission(RedBullseyeMissionBase):
         if self._failed:
             return MissionStatus.FAILURE
 
-        self._request_gimbal_if_ready(context)
-
         handler = {
             PackageDropState.INIT: self._handle_init,
             PackageDropState.WAITING_FOR_CONNECTION: self._handle_waiting_for_connection,
@@ -63,6 +71,7 @@ class PackageDropMission(RedBullseyeMissionBase):
             PackageDropState.ACQUIRE_TARGET: self._handle_acquire_target,
             PackageDropState.TARGET_NOT_FOUND: self._handle_target_not_found,
             PackageDropState.TRACK_AND_DESCEND: self._handle_track_and_descend,
+            PackageDropState.FINAL_FIXED_DROP_COLUMN: self._handle_final_fixed_drop_column,
             PackageDropState.DROP_PAYLOAD: self._handle_drop_payload,
             PackageDropState.COMPLETE: self._handle_complete,
         }.get(self._state, self._handle_invalid_state)
@@ -123,9 +132,11 @@ class PackageDropMission(RedBullseyeMissionBase):
         self._hold_current_position(context)
 
         if not self._has_recent_target_detection(context):
-            self._transition_to(PackageDropState.TARGET_NOT_FOUND, context)
+            if self._target_loss_grace_expired(context):
+                self._transition_to(PackageDropState.TARGET_NOT_FOUND, context)
             return MissionStatus.RUNNING
 
+        self._clear_target_loss_grace()
         if self._centering_dwell_start is None:
             self._centering_dwell_start = context.now()
             context.logger.info(
@@ -144,48 +155,10 @@ class PackageDropMission(RedBullseyeMissionBase):
         if context.global_gps is None or context.local_pose is None:
             return MissionStatus.WAITING
 
-        if self._recovery_target_altitude is None or self._recovery_hold_position is None:
-            if self._recovery_attempts >= self._max_recovery_attempts:
-                context.logger.error(
-                    f"[{self.name}] Target recovery exceeded {self._max_recovery_attempts} attempts"
-                )
-                return MissionStatus.FAILURE
-
-            current_altitude = context.local_pose.pose.position.z
-            next_altitude = current_altitude + self._not_found_ascent_m
-            if current_altitude >= self._max_recovery_altitude_m or next_altitude > self._max_recovery_altitude_m:
-                context.logger.error(
-                    f"[{self.name}] Recovery climb would exceed "
-                    f"{self._max_recovery_altitude_m:.1f} m"
-                )
-                return MissionStatus.FAILURE
-
-            self._recovery_target_altitude = min(
-                next_altitude,
-                self._max_recovery_altitude_m,
-            )
-            self._recovery_hold_position = (
-                context.global_gps.latitude,
-                context.global_gps.longitude,
-            )
-            self._recovery_attempts += 1
-            context.logger.info(
-                f"[{self.name}] Target lost, climbing to "
-                f"{self._recovery_target_altitude:.1f} m "
-                f"(attempt {self._recovery_attempts}/{self._max_recovery_attempts})"
-            )
-
-        context.set_global_position_setpoint(
-            self._recovery_hold_position[0],
-            self._recovery_hold_position[1],
-            self._recovery_target_altitude,
-            yaw_deg=HOLD_YAW_DEG,
-            lock_yaw=True,
-        )
-        altitude_error = abs(
-            context.local_pose.pose.position.z - self._recovery_target_altitude
-        )
-        if altitude_error <= self._arrival_alt_tolerance_m:
+        recovery = self._update_target_recovery(context)
+        if recovery.failed:
+            return MissionStatus.FAILURE
+        if recovery.reached_altitude:
             self._transition_to(PackageDropState.ACQUIRE_TARGET, context)
         return MissionStatus.RUNNING
 
@@ -197,31 +170,26 @@ class PackageDropMission(RedBullseyeMissionBase):
             context,
             target_altitude_m=self._drop_altitude_m,
             descent_rate_mps=self._descent_rate_mps,
+            target_altitude_tolerance_m=self._drop_altitude_tolerance_m,
         )
         if command is None:
-            self._reset_tracking_filter()
-            context.set_local_velocity_setpoint(
-                0.0,
-                0.0,
-                0.0,
-                yaw_deg=HOLD_YAW_DEG,
-            )
-            self._log_velocity_command(
-                context,
-                east_mps=0.0,
-                north_mps=0.0,
-                up_mps=0.0,
-            )
-            if self._target_loss_start is None:
-                self._target_loss_start = context.now()
-                return MissionStatus.RUNNING
-
-            if context.seconds_since(self._target_loss_start) >= self._target_timeout_s:
+            if self._hold_tracking_loss_grace(context):
                 self._transition_to(PackageDropState.TARGET_NOT_FOUND, context)
             return MissionStatus.RUNNING
 
-        self._target_loss_start = None
+        self._clear_target_loss_grace()
         if command.tracking_error_m <= self._centering_tolerance_m:
+            if (
+                context.local_pose.pose.position.z
+                <= self._drop_column_handoff_altitude_m
+            ):
+                context.logger.info(
+                    f"[{self.name}] Entering fixed drop column at "
+                    f"{context.local_pose.pose.position.z:.2f} m "
+                    f"(handoff {self._drop_column_handoff_altitude_m:.2f} m)"
+                )
+                self._transition_to(PackageDropState.FINAL_FIXED_DROP_COLUMN, context)
+                return MissionStatus.RUNNING
             if command.reached_target_altitude:
                 if self._centering_dwell_start is None:
                     self._centering_dwell_start = context.now()
@@ -251,9 +219,54 @@ class PackageDropMission(RedBullseyeMissionBase):
         )
         return MissionStatus.RUNNING
 
+    def _handle_final_fixed_drop_column(self, context: MissionContext) -> MissionStatus:
+        if context.global_gps is None or context.local_pose is None:
+            return MissionStatus.WAITING
+
+        if self._drop_column_hold_position is None:
+            self._drop_column_hold_position = (
+                context.global_gps.latitude,
+                context.global_gps.longitude,
+            )
+            self._drop_column_target_altitude_m = context.local_pose.pose.position.z
+            self._drop_column_last_update = context.now()
+            context.logger.info(
+                f"[{self.name}] Freezing drop column at "
+                f"({self._drop_column_hold_position[0]:.7f}, "
+                f"{self._drop_column_hold_position[1]:.7f})"
+            )
+
+        if self._drop_column_target_altitude_m is None:
+            self._drop_column_target_altitude_m = context.local_pose.pose.position.z
+
+        now = context.now()
+        elapsed_s = 0.0
+        if self._drop_column_last_update is not None:
+            elapsed_s = max(
+                0.0,
+                min((now - self._drop_column_last_update).nanoseconds / 1e9, 0.5),
+            )
+        self._drop_column_last_update = now
+
+        current_altitude = context.local_pose.pose.position.z
+        max_descent_step = abs(self._descent_rate_mps) * elapsed_s
+        self._drop_column_target_altitude_m = min(
+            self._drop_column_target_altitude_m,
+            current_altitude,
+        )
+        self._drop_column_target_altitude_m = max(
+            self._drop_altitude_m,
+            self._drop_column_target_altitude_m - max_descent_step,
+        )
+
+        self._hold_drop_column_position(context, self._drop_column_target_altitude_m)
+        if abs(current_altitude - self._drop_altitude_m) <= self._drop_altitude_tolerance_m:
+            self._transition_to(PackageDropState.DROP_PAYLOAD, context)
+        return MissionStatus.RUNNING
+
     def _handle_drop_payload(self, context: MissionContext) -> MissionStatus:
         if context.global_gps is not None and context.local_pose is not None:
-            self._hold_current_position(context, altitude_m=self._drop_altitude_m)
+            self._hold_drop_column_position(context, self._drop_altitude_m)
         else:
             context.set_local_velocity_setpoint(
                 0.0,
@@ -284,19 +297,18 @@ class PackageDropMission(RedBullseyeMissionBase):
             self._transition_to(PackageDropState.COMPLETE, context)
             return MissionStatus.SUCCESS
 
-        if self._servo_requested:
+        if self._actuator_requested:
             return MissionStatus.RUNNING
 
         if not context.command_service_ready():
             return MissionStatus.WAITING
 
-        context.logger.info(f"[{self.name}] Releasing payload")
-        context.actuate_servo(
-            self._servo_channel,
-            self._servo_open_pwm,
-            self._on_servo_response,
+        context.logger.info(f"[{self.name}] Opening sprayer for payload drop")
+        context.command_sprayer(
+            enable=True,
+            done_callback=self._on_sprayer_response,
         )
-        self._servo_requested = True
+        self._actuator_requested = True
         return MissionStatus.RUNNING
 
     def _handle_complete(self, _context: MissionContext) -> MissionStatus:
@@ -305,14 +317,30 @@ class PackageDropMission(RedBullseyeMissionBase):
     def _handle_invalid_state(self, _context: MissionContext) -> MissionStatus:
         return MissionStatus.FAILURE
 
-    def _on_servo_response(self, future) -> None:
-        self._servo_requested = False
+    def _on_sprayer_response(self, future) -> None:
+        self._actuator_requested = False
         try:
             result = future.result()
             if result is not None and result.success:
                 self._drop_actuated = True
         except Exception:
             self._drop_actuated = False
+
+    def _hold_drop_column_position(
+        self,
+        context: MissionContext,
+        altitude_m: float,
+    ) -> None:
+        if self._drop_column_hold_position is None:
+            self._hold_current_position(context, altitude_m=altitude_m)
+            return
+        context.set_global_position_setpoint(
+            self._drop_column_hold_position[0],
+            self._drop_column_hold_position[1],
+            altitude_m,
+            yaw_deg=HOLD_YAW_DEG,
+            lock_yaw=True,
+        )
 
     def _transition_to(
         self,
@@ -329,6 +357,13 @@ class PackageDropMission(RedBullseyeMissionBase):
         if new_state != PackageDropState.TARGET_NOT_FOUND:
             self._recovery_target_altitude = None
             self._recovery_hold_position = None
+        if new_state not in (
+            PackageDropState.FINAL_FIXED_DROP_COLUMN,
+            PackageDropState.DROP_PAYLOAD,
+        ):
+            self._drop_column_hold_position = None
+            self._drop_column_target_altitude_m = None
+            self._drop_column_last_update = None
         if new_state != PackageDropState.DROP_PAYLOAD:
             self._drop_hover_start = None
 

@@ -10,15 +10,18 @@ mission_sequence:
       name: package_delivery                       # Human-readable mission instance name for logs.
       failure_policy: continue_to_next             # Keep the sequence running after this mission fails.
       config:
-        target_latitude: -35.3631271               # GPS latitude of the delivery target.
-        target_longitude: 149.1653479              # GPS longitude of the delivery target.
+        # Live-flight template: edit these coordinates before real flight.
+        # The copied defaults below are inherited from the simulation demo and
+        # are not safe operating coordinates on a real field.
+        target_latitude: 40.4287069               # GPS latitude of the delivery target.
+        target_longitude: -86.9290042              # GPS longitude of the delivery target.
         transit_altitude_m: 15.0                   # Cruise altitude used while flying to the target area.
         landing_check_threshold_m: 6.0             # Altitude where delivery switches to touchdown logic.
         touchdown_handoff_tolerance_m: 0.2         # Separate altitude tolerance for the final fixed-column handoff.
         relaunch_altitude_m: 12.0                  # Altitude to climb back to after delivery is complete.
         fake_drop: true                            # Simulate payload delivery without releasing the gripper actuator.
         descent_rate_mps: 0.35                     # Normal descent speed while centered over the target.
-        final_descent_rate_mps: 0.25               # Slower descent speed near touchdown.
+        final_descent_rate_mps: 0.10               # Slower descent speed near touchdown.
         delivery_dwell_s: 5.0                      # Time to remain on the ground before relaunch.
         guided_relaunch_rate_mps: 0.6              # Commanded climb rate for guided relaunch.
         guided_relaunch_max_climb_rate_mps: 2.5    # Maximum climb rate clamp during relaunch.

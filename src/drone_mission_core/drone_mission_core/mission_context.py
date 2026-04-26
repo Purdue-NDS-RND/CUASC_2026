@@ -13,7 +13,7 @@ from mavros_msgs.msg import (
     PositionTarget,
     State,
 )
-from mavros_msgs.srv import CommandLong, CommandTOL, GimbalManagerPitchyaw, SetMode
+from mavros_msgs.srv import CommandLong, CommandTOL, SetMode
 from rclpy.impl.rcutils_logger import RcutilsLogger
 from rclpy.node import Node
 from rclpy.task import Future
@@ -84,9 +84,6 @@ class MissionContext:
     def command_service_ready(self) -> bool:
         return self._node._command_client.service_is_ready()
 
-    def gimbal_service_ready(self) -> bool:
-        return self._node._gimbal_client.service_is_ready()
-
     def target_cv_control_ready(self) -> bool:
         return self._node._target_cv_control_client.service_is_ready()
 
@@ -115,33 +112,35 @@ class MissionContext:
             future.add_done_callback(done_callback)
         return future
 
-    def point_gimbal(
+    def command_gripper(
         self,
-        pitch_deg: float,
-        yaw_deg: float,
+        *,
+        release: bool,
         done_callback: Callable[[Future[Any]], None] | None = None,
     ) -> Future[Any]:
-        request = GimbalManagerPitchyaw.Request()
-        request.pitch = float(pitch_deg)
-        request.yaw = float(yaw_deg)
-        request.pitch_rate = float("nan")
-        request.yaw_rate = float("nan")
-        request.flags = 0
-        future = self._node._gimbal_client.call_async(request)
+        request = CommandLong.Request()
+        request.broadcast = False
+        request.command = 211
+        request.confirmation = 0
+        request.param1 = 1.0
+        request.param2 = 0.0 if release else 1.0
+        future = self._node._command_client.call_async(request)
         if done_callback is not None:
             future.add_done_callback(done_callback)
         return future
 
-    def actuate_servo(
+    def command_sprayer(
         self,
-        channel: int,
-        pwm: int,
+        *,
+        enable: bool,
         done_callback: Callable[[Future[Any]], None] | None = None,
     ) -> Future[Any]:
         request = CommandLong.Request()
-        request.command = 183
-        request.param1 = float(channel)
-        request.param2 = float(pwm)
+        request.broadcast = False
+        request.command = 216
+        request.confirmation = 0
+        request.param1 = 1.0 if enable else 0.0
+        request.param2 = 0.0
         future = self._node._command_client.call_async(request)
         if done_callback is not None:
             future.add_done_callback(done_callback)

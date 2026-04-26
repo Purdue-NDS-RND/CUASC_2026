@@ -82,8 +82,6 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
         if self._failed:
             return MissionStatus.FAILURE
 
-        self._request_gimbal_if_ready(context)
-
         handler = {
             PackageDeliveryState.INIT: self._handle_init,
             PackageDeliveryState.WAITING_FOR_CONNECTION: self._handle_waiting_for_connection,
@@ -154,9 +152,11 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
         self._hold_current_position(context)
 
         if not self._has_recent_target_detection(context):
-            self._transition_to(PackageDeliveryState.TARGET_NOT_FOUND, context)
+            if self._target_loss_grace_expired(context):
+                self._transition_to(PackageDeliveryState.TARGET_NOT_FOUND, context)
             return MissionStatus.RUNNING
 
+        self._clear_target_loss_grace()
         if self._centering_dwell_start is None:
             self._centering_dwell_start = context.now()
             context.logger.info(
@@ -175,55 +175,10 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
         if context.global_gps is None or context.local_pose is None:
             return MissionStatus.WAITING
 
-        if (
-            self._recovery_target_altitude is None
-            or self._recovery_hold_position is None
-        ):
-            if self._recovery_attempts >= self._max_recovery_attempts:
-                context.logger.error(
-                    f"[{self.name}] Target recovery exceeded "
-                    f"{self._max_recovery_attempts} attempts"
-                )
-                return MissionStatus.FAILURE
-
-            current_altitude = context.local_pose.pose.position.z
-            next_altitude = current_altitude + self._not_found_ascent_m
-            if (
-                current_altitude >= self._max_recovery_altitude_m
-                or next_altitude > self._max_recovery_altitude_m
-            ):
-                context.logger.error(
-                    f"[{self.name}] Recovery climb would exceed "
-                    f"{self._max_recovery_altitude_m:.1f} m"
-                )
-                return MissionStatus.FAILURE
-
-            self._recovery_target_altitude = min(
-                next_altitude,
-                self._max_recovery_altitude_m,
-            )
-            self._recovery_hold_position = (
-                context.global_gps.latitude,
-                context.global_gps.longitude,
-            )
-            self._recovery_attempts += 1
-            context.logger.info(
-                f"[{self.name}] Target lost, climbing to "
-                f"{self._recovery_target_altitude:.1f} m "
-                f"(attempt {self._recovery_attempts}/{self._max_recovery_attempts})"
-            )
-
-        context.set_global_position_setpoint(
-            self._recovery_hold_position[0],
-            self._recovery_hold_position[1],
-            self._recovery_target_altitude,
-            yaw_deg=HOLD_YAW_DEG,
-            lock_yaw=True,
-        )
-        altitude_error = abs(
-            context.local_pose.pose.position.z - self._recovery_target_altitude
-        )
-        if altitude_error <= self._arrival_alt_tolerance_m:
+        recovery = self._update_target_recovery(context)
+        if recovery.failed:
+            return MissionStatus.FAILURE
+        if recovery.reached_altitude:
             self._transition_to(PackageDeliveryState.ACQUIRE_TARGET, context)
         return MissionStatus.RUNNING
 
@@ -245,34 +200,11 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
             target_altitude_tolerance_m=self._touchdown_handoff_tolerance_m,
         )
         if command is None:
-            self._reset_tracking_filter()
-            context.set_local_velocity_setpoint(
-                0.0,
-                0.0,
-                0.0,
-                yaw_deg=HOLD_YAW_DEG,
-            )
-            self._log_velocity_command(
-                context,
-                east_mps=0.0,
-                north_mps=0.0,
-                up_mps=0.0,
-            )
-            if context.local_pose.pose.position.z <= self._landing_check_threshold_m:
-                context.logger.warn(
-                    f"[{self.name}] Lost target inside touchdown band; retrying"
-                )
-                self._transition_to(PackageDeliveryState.TARGET_NOT_FOUND, context)
-                return MissionStatus.RUNNING
-            if self._target_loss_start is None:
-                self._target_loss_start = context.now()
-                return MissionStatus.RUNNING
-
-            if context.seconds_since(self._target_loss_start) >= self._target_timeout_s:
+            if self._hold_tracking_loss_grace(context):
                 self._transition_to(PackageDeliveryState.TARGET_NOT_FOUND, context)
             return MissionStatus.RUNNING
 
-        self._target_loss_start = None
+        self._clear_target_loss_grace()
         if command.tracking_error_m <= self._centering_tolerance_m:
             if command.reached_target_altitude:
                 if not context.landing_state_available():
@@ -424,18 +356,17 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
                 self._delivery_complete = True
 
         if not self._delivery_complete and not self._fake_drop:
-            if self._servo_requested:
+            if self._actuator_requested:
                 pass
             elif not context.command_service_ready():
                 return MissionStatus.WAITING
             else:
-                context.logger.info(f"[{self.name}] Delivering payload")
-                context.actuate_servo(
-                    self._servo_channel,
-                    self._servo_open_pwm,
-                    self._on_servo_response,
+                context.logger.info(f"[{self.name}] Releasing gripper payload")
+                context.command_gripper(
+                    release=True,
+                    done_callback=self._on_gripper_response,
                 )
-                self._servo_requested = True
+                self._actuator_requested = True
 
         if context.seconds_since(self._ground_dwell_start) < self._delivery_dwell_s:
             return MissionStatus.RUNNING
@@ -474,8 +405,8 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
     def _handle_invalid_state(self, _context: MissionContext) -> MissionStatus:
         return MissionStatus.FAILURE
 
-    def _on_servo_response(self, future) -> None:
-        self._servo_requested = False
+    def _on_gripper_response(self, future) -> None:
+        self._actuator_requested = False
         try:
             result = future.result()
             if result is not None and result.success:

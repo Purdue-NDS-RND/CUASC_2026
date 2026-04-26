@@ -46,11 +46,18 @@ Defined in `drone_mission_demo/missions/`:
 
 `launch/package_drop_demo.launch.py` starts the shared vision-guided delivery stack:
 - `simple_takeoff_service` from `drone_utils`
-- `gimbal_point_service` from `drone_utils`
 - `target_cv` from `drone_target_cv`
 - `mission_executor` from `drone_mission_core`
 
 `launch/package_delivery_demo.launch.py` starts the same stack but defaults to the package-delivery sequence.
+
+`launch/package_drop_live.launch.py` starts the live-flight version of that stack:
+- `usb_grabber` from `drone_target_cv`
+- `simple_takeoff_service` from `drone_utils`
+- `target_cv` from `drone_target_cv`
+- `mission_executor` from `drone_mission_core`
+
+`launch/package_delivery_live.launch.py` starts the same live stack but defaults to the package-delivery live sequence.
 
 ### Config Layout
 
@@ -59,11 +66,14 @@ This package keeps mission config organized under `config/`:
 | Path | Purpose |
 |---|---|
 | `config/params/mission_params.yaml` | ROS parameters for the takeoff service and mission executor |
+| `config/params/live_target_mission.yaml` | Shared ROS parameters for the live USB-camera vision stack |
 | `config/params/package_drop_params.yaml` | ROS parameters for the package-drop launch stack |
+| `config/sequences/package_delivery_live.yaml` | Live-flight package-delivery template sequence |
 | `config/patterns/square.yaml` | Reusable square waypoint pattern |
 | `config/patterns/zig_zag.yaml` | Reusable zig-zag waypoint pattern |
 | `config/sequences/package_delivery_demo.yaml` | Armed touchdown delivery mission sequence |
 | `config/sequences/package_drop_demo.yaml` | Package-drop mission sequence |
+| `config/sequences/package_drop_live.yaml` | Live-flight package-drop template sequence |
 | `config/sequences/square_then_zig_zag.yaml` | Default multi-mission sequence |
 | `config/sequences/square_only.yaml` | Single-mission compatibility example |
 
@@ -87,7 +97,8 @@ It:
 `PackageDropMission` owns a vision-guided drop flow:
 
 ```text
-TRANSIT_TO_TARGET -> ACQUIRE_TARGET -> TRACK_AND_DESCEND -> DROP_PAYLOAD
+TRANSIT_TO_TARGET -> ACQUIRE_TARGET -> TRACK_AND_DESCEND
+-> FINAL_FIXED_DROP_COLUMN -> DROP_PAYLOAD
 ```
 
 It:
@@ -96,13 +107,15 @@ It:
 - waits for a stable visual lock from `target_cv`
 - uses centered normalized target offsets from `target_cv` so the XY control law does not depend on camera resolution
 - commands XY correction and vertical descent simultaneously through shared local velocity setpoints
+- holds briefly on target-loss flicker before climbing for recovery
+- freezes the current GPS lat/lon for the final drop column once low and centered
 - bounds target-loss recovery with `max_recovery_altitude_m` and `max_recovery_attempts`
-- supports `fake_drop: true` for simulation-only testing, which still uses GPS transit and vision tracking but skips the real servo actuation step after the normal drop hover
+- supports `fake_drop: true` for simulation-only testing, which still uses GPS transit and vision tracking but skips the real sprayer-open actuation step after the normal drop hover
 - can use `failure_policy: continue_to_next` so a failed drop falls through to the next mission in the sequence
 
 Drop-specific vision tuning keys:
-- `centering_tolerance_norm` — centered-error magnitude in normalized image units required before descent/drop transitions
-- `centering_gain_mps_per_norm` — horizontal velocity gain in m/s per normalized error unit
+- `drop_column_handoff_altitude_m` — altitude below which a centered target commits to a fixed GPS drop column
+- `drop_altitude_tolerance_m` — altitude tolerance for accepting the release height
 
 ## `PackageDeliveryMission` Behavior
 
@@ -121,7 +134,7 @@ It:
 - keeps visual XY corrections active until the vehicle is low and centered
 - freezes the current GPS lat/lon at the handoff height and descends on that fixed column
 - confirms touchdown from `/mavros/extended_state` rather than guessing from altitude stall
-- actuates the servo, or uses `fake_drop: true`, only after touchdown confirmation
+- releases the gripper, or uses `fake_drop: true`, only after touchdown confirmation
 - holds on the ground for `delivery_dwell_s` before relaunching
 - relaunches to `relaunch_altitude_m` and completes airborne so the next mission can continue
 - preserves the original RTL/home point by avoiding disarm and re-arm inside the mission
@@ -132,8 +145,8 @@ ArduPilot `DISARM_DELAY` accordingly. A safe starting point is
 `5-10 s` dwell.
 
 This v1 assumes the delivery target is on roughly the same ground plane as the original launch location.
-The real servo release sequence is still a simple v1 path; until the final
-actuator behavior is defined, `fake_drop: true` remains the safer demo setting.
+The real actuator path now uses MAVROS gripper and sprayer commands; until the
+hardware flow is fully validated, `fake_drop: true` remains the safer demo setting.
 
 Delivery-specific config keys:
 - `landing_check_threshold_m` — local-altitude threshold where the mission freezes the current GPS position and starts the fixed-column touchdown
@@ -181,7 +194,21 @@ Run the package-delivery demo:
 ros2 launch drone_mission_demo package_delivery_demo.launch.py
 ```
 
-The default `package_drop_demo.yaml` is configured for simulation with `fake_drop: true` and an offset GPS target so the mission still performs transit and vision-guided tracking before simulating the release. Set `fake_drop: false` in `config/sequences/package_drop_demo.yaml` to exercise the real servo actuation path.
+The default `package_drop_demo.yaml` is configured for simulation with `fake_drop: true` and an offset GPS target so the mission still performs transit and vision-guided tracking before simulating the release. Set `fake_drop: false` in `config/sequences/package_drop_demo.yaml` to exercise the real sprayer actuation path.
+
+Run the live package-drop stack:
+
+```bash
+ros2 launch drone_mission_demo package_drop_live.launch.py
+```
+
+Run the live package-delivery stack:
+
+```bash
+ros2 launch drone_mission_demo package_delivery_live.launch.py
+```
+
+The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. They assume the live camera is fixed. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
 
 ## Sequence Example
 

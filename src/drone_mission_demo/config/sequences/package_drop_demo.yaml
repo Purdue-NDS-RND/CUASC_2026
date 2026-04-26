@@ -15,7 +15,7 @@ mission_sequence:
         target_longitude: 149.1653479              # GPS longitude of the drop target.
         transit_altitude_m: 15.0                   # Cruise altitude used while flying to the target area.
         drop_altitude_m: 4.0                       # Target altitude for the package release.
-        fake_drop: true                            # Simulate payload release without actuating the servo.
+        fake_drop: true                            # Simulate payload release without opening the sprayer actuator.
         descent_rate_mps: 0.35                     # Descent speed while centered over the target.
         camera_fx_px: 2334.99647                   # Camera focal length in pixels along the x-axis.
         camera_fy_px: 2338.06625                   # Camera focal length in pixels along the y-axis.
@@ -23,24 +23,23 @@ mission_sequence:
         camera_calibration_height_px: 2160.0       # Image height used when the camera intrinsics were calibrated.
         camera_yaw_offset_deg: 0.0                 # Fixed yaw rotation between the camera and vehicle body.
         centering_tolerance_m: 0.22                # Ground-error threshold considered centered enough to descend.
-        centering_deadband_m: 0.08                 # Small projected errors below this are treated as zero.
-        tracking_low_pass_alpha: 0.22              # Low-pass filter weight; higher values react faster but noisier.
-        centering_gain_mps_per_m: 0.40             # XY velocity gain applied to projected ground error.
-        max_centering_speed_mps: 1.0              # Maximum commanded lateral tracking speed.
+        centering_deadband_m: 0.15                 # Small projected errors below this are treated as zero.
+        tracking_low_pass_alpha: 0.12              # Low-pass filter weight; higher values react faster but noisier.
+        centering_gain_mps_per_m: 0.25             # XY velocity gain applied to projected ground error.
+        max_centering_speed_mps: 0.45             # Maximum commanded lateral tracking speed.
         arrival_radius_m: 3.0                      # Horizontal GPS radius used to declare arrival at the target area.
         arrival_alt_tolerance_m: 2.0               # Altitude tolerance used when checking target heights.
-        not_found_ascent_m: 3.0                    # Climb amount per retry when the visual target is lost.
+        not_found_ascent_m: 1.0                    # Climb amount per retry when the visual target is lost.
         max_recovery_altitude_m: 40.0              # Hard ceiling for target-recovery climbs.
-        max_recovery_attempts: 10                  # Maximum number of visual reacquisition attempts.
+        max_recovery_attempts: 4                   # Maximum number of visual reacquisition attempts.
+        target_loss_grace_s: 4.0                   # Hold briefly on CV loss before starting recovery.
+        recovery_alt_tolerance_m: 0.5              # Altitude tolerance for visual recovery climbs.
         min_projection_altitude_m: 0.75            # Minimum altitude where ground projection is considered valid.
         max_projection_distance_m: 25.0            # Reject projected detections farther than this from the drone.
         centering_dwell_s: 1.0                     # Time to remain centered before committing to the drop phase.
+        drop_altitude_tolerance_m: 0.5             # Altitude tolerance for the package release height.
+        drop_column_handoff_altitude_m: 8.0        # Freeze GPS column below this height once centered.
         drop_hover_dwell_s: 8.0                    # Hover time at drop altitude before releasing the payload.
-        servo_channel: 9                           # ArduPilot servo output channel used for the payload release.
-        servo_open_pwm: 1900                       # PWM value sent to actuate the payload release servo.
-        enable_gimbal_pointing: false              # If true, command the gimbal toward the configured angles.
-        gimbal_pitch_deg: -90.0                    # Desired gimbal pitch angle in degrees.
-        gimbal_yaw_deg: 0.0                        # Desired gimbal yaw angle in degrees.
         target_timeout_s: 2.0                      # Detection freshness timeout before the target is considered lost.
 
     - type: rtl                                    # Return-to-launch mission.

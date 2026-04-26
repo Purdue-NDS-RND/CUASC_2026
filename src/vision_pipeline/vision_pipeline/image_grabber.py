@@ -28,7 +28,7 @@ class ImageGrabber(Node):
         self.declare_parameter("image_publishing_rate", 4.0)
         self.declare_parameter("camera_info_file", "arducam_info.yaml")
         self.declare_parameter("enable_timelapse", True)
-        self.declare_parameter("save_dir", "~/camera_captures_calibrated")
+        self.declare_parameter("save_dir", "/home/nds2/image_grabber_captures")
         self.declare_parameter("save_interval_sec", 1.0)
 
         self.width = self.get_parameter("image_width").value

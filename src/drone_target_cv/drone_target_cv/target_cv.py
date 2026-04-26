@@ -201,17 +201,18 @@ class TargetCV(Node):
             cv2.RETR_EXTERNAL,
             cv2.CHAIN_APPROX_SIMPLE,
         )
+        blank_mask = np.zeros(clean.shape, dtype=np.uint8)
         if not contours:
-            return annotated, clean, None, None
+            return annotated, blank_mask, None, None
 
         largest_contour = max(contours, key=cv2.contourArea)
         area = cv2.contourArea(largest_contour)
         if area < self._min_target_area_px:
-            return annotated, clean, None, None
+            return annotated, blank_mask, None, None
 
         moments = cv2.moments(largest_contour)
         if moments["m00"] == 0:
-            return annotated, clean, None, None
+            return annotated, blank_mask, None, None
 
         center_x = int(moments["m10"] / moments["m00"])
         center_y = int(moments["m01"] / moments["m00"])

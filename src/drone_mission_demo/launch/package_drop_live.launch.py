@@ -92,7 +92,7 @@ def generate_launch_description() -> LaunchDescription:
             # Options: rolling, global. device_path below overrides this selection when set.
             DeclareLaunchArgument(
                 "camera_type",
-                default_value="rolling",
+                default_value="global",
                 description="Camera type preset: rolling or global",
             ),
             DeclareLaunchArgument(
@@ -102,12 +102,12 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "image_width",
-                default_value="1280",
+                default_value="640",
                 description="Requested USB camera capture width in pixels",
             ),
             DeclareLaunchArgument(
                 "image_height",
-                default_value="720",
+                default_value="480",
                 description="Requested USB camera capture height in pixels",
             ),
             DeclareLaunchArgument(
@@ -117,12 +117,12 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "publish_height",
-                default_value="360",
+                default_value="480",
                 description="Published image height in pixels after resize",
             ),
             DeclareLaunchArgument(
                 "fps",
-                default_value="30.0",
+                default_value="60.0",
                 description="Requested USB camera frame rate",
             ),
             DeclareLaunchArgument(

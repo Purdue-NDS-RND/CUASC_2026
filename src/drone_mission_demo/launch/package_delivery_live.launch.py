@@ -55,7 +55,12 @@ def generate_launch_description() -> LaunchDescription:
         executable="target_cv",
         name="target_cv",
         output="screen",
-        parameters=[params],
+        parameters=[
+            params,
+            {
+                "sim_hsv": LaunchConfiguration("sim_hsv"),
+            },
+        ],
     )
 
     executor_node = Node(
@@ -144,6 +149,11 @@ def generate_launch_description() -> LaunchDescription:
                 "compressed_quality",
                 default_value="20",
                 description="JPEG quality used for /camera/image/compressed",
+            ),
+            DeclareLaunchArgument(
+                "sim_hsv",
+                default_value="false",
+                description="Use sim red HSV thresholds when true; live/outdoor thresholds when false",
             ),
             usb_grabber_node,
             takeoff_service_node,

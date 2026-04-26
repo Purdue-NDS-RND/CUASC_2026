@@ -60,7 +60,16 @@ target_cv:
   ros__parameters:
     image_topic: "camera/image/compressed"
     compressed_input: true
+    sim_hsv: false
 ```
+
+Set `sim_hsv: true` for the broader sim red threshold and `sim_hsv: false`
+for the stricter live/outdoor red threshold.
+
+Mask cleanup tuning:
+- `hsv_blur_kernel_px` smooths the HSV image before thresholding
+- `morph_kernel_px` removes small islands and fills small holes
+- `mask_blur_kernel_px` optionally smooths the final binary mask edges before contour detection
 
 Camera type presets:
 

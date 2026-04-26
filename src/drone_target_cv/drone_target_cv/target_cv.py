@@ -44,6 +44,10 @@ class TargetCV(Node):
         self.declare_parameter("debug_view", False)
         self.declare_parameter("start_enabled", True)
         self.declare_parameter("min_target_area_px", 25.0)
+        self.declare_parameter("sim_hsv", True)
+        self.declare_parameter("hsv_blur_kernel_px", 5)
+        self.declare_parameter("morph_kernel_px", 5)
+        self.declare_parameter("mask_blur_kernel_px", 0)
 
         self._image_topic = (
             self.get_parameter("image_topic").get_parameter_value().string_value
@@ -53,6 +57,19 @@ class TargetCV(Node):
         )
         self._min_target_area_px = (
             self.get_parameter("min_target_area_px").get_parameter_value().double_value
+        )
+        self._sim_hsv = (
+            self.get_parameter("sim_hsv").get_parameter_value().bool_value
+        )
+        self._hsv_blur_kernel_px = self._odd_kernel_size(
+            self.get_parameter("hsv_blur_kernel_px").value
+        )
+        self._morph_kernel_px = self._odd_kernel_size(
+            self.get_parameter("morph_kernel_px").value
+        )
+        self._mask_blur_kernel_px = self._odd_kernel_size(
+            self.get_parameter("mask_blur_kernel_px").value,
+            allow_disabled=True,
         )
         self._enabled = False
         self._image_sub = None
@@ -90,7 +107,11 @@ class TargetCV(Node):
         )
         self.get_logger().info(
             "TargetCV node started - listening on "
-            f"'{self._image_topic}' (compressed={self._compressed_input})"
+            f"'{self._image_topic}' (compressed={self._compressed_input}, "
+            f"sim_hsv={self._sim_hsv}, "
+            f"hsv_blur_kernel_px={self._hsv_blur_kernel_px}, "
+            f"morph_kernel_px={self._morph_kernel_px}, "
+            f"mask_blur_kernel_px={self._mask_blur_kernel_px})"
         )
 
         self.timer = self.create_timer(1.0, self._timer_callback)
@@ -173,28 +194,53 @@ class TargetCV(Node):
             return cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
         raise ValueError(f"Unsupported image encoding: {msg.encoding}")
 
+    @staticmethod
+    def _odd_kernel_size(value, *, allow_disabled: bool = False) -> int:
+        size = int(value)
+        if allow_disabled and size <= 1:
+            return 0
+        size = max(size, 1)
+        if size % 2 == 0:
+            size += 1
+        return size
+
     def _detect_target_center(self, image):
         annotated = image.copy()
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        blur = cv2.GaussianBlur(hsv, (5, 5), 0)
+        blur = cv2.GaussianBlur(
+            hsv,
+            (self._hsv_blur_kernel_px, self._hsv_blur_kernel_px),
+            0,
+        )
 
-        lower_red1 = np.array([0, 70, 50])
-        upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 70, 50])
-        upper_red2 = np.array([180, 255, 255])
-
-        #lower_red1 = np.array([0, 120, 80])
-        #upper_red1 = np.array([10, 255, 255])
-        #lower_red2 = np.array([170, 120, 80])
-        #upper_red2 = np.array([180, 255, 255])
+        if self._sim_hsv:
+            lower_red1 = np.array([0, 70, 50])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 70, 50])
+            upper_red2 = np.array([180, 255, 255])
+        else:
+            lower_red1 = np.array([0, 120, 80])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 120, 80])
+            upper_red2 = np.array([180, 255, 255])
 
         mask1 = cv2.inRange(blur, lower_red1, upper_red1)
         mask2 = cv2.inRange(blur, lower_red2, upper_red2)
         mask = cv2.bitwise_or(mask1, mask2)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (self._morph_kernel_px, self._morph_kernel_px),
+        )
         clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel)
+        if self._mask_blur_kernel_px:
+            clean = cv2.GaussianBlur(
+                clean,
+                (self._mask_blur_kernel_px, self._mask_blur_kernel_px),
+                0,
+            )
+            _, clean = cv2.threshold(clean, 127, 255, cv2.THRESH_BINARY)
 
         contours, _ = cv2.findContours(
             clean,

@@ -208,7 +208,7 @@ Run the live package-delivery stack:
 ros2 launch drone_mission_demo package_delivery_live.launch.py
 ```
 
-The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. They assume the live camera is fixed. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
+The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. Use `camera_type:=rolling` for the default 12MP camera or `camera_type:=global` for the OV9782 global-shutter camera. Demo launches default `sim_hsv:=true`; live launches default `sim_hsv:=false` for the stricter outdoor red threshold. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
 
 ## Sequence Example
 

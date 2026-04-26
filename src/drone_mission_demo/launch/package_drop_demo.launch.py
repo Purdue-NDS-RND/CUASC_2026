@@ -32,7 +32,12 @@ def generate_launch_description() -> LaunchDescription:
         executable="target_cv",
         name="target_cv",
         output="screen",
-        parameters=[params],
+        parameters=[
+            params,
+            {
+                "sim_hsv": LaunchConfiguration("sim_hsv"),
+            },
+        ],
     )
 
     executor_node = Node(
@@ -60,6 +65,11 @@ def generate_launch_description() -> LaunchDescription:
                 "sequence",
                 default_value="config/sequences/package_drop_demo.yaml",
                 description="Mission sequence YAML relative to the drone_mission_demo package",
+            ),
+            DeclareLaunchArgument(
+                "sim_hsv",
+                default_value="true",
+                description="Use sim red HSV thresholds when true; live/outdoor thresholds when false",
             ),
             takeoff_service_node,
             target_cv_node,

@@ -26,6 +26,7 @@ def generate_launch_description() -> LaunchDescription:
         output="screen",
         parameters=[
             {
+                "camera_type": LaunchConfiguration("camera_type"),
                 "device_path": LaunchConfiguration("device_path"),
                 "image_width": LaunchConfiguration("image_width"),
                 "image_height": LaunchConfiguration("image_height"),
@@ -83,10 +84,16 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="config/sequences/package_delivery_live.yaml",
                 description="Mission sequence YAML relative to the drone_mission_demo package",
             ),
+            # Options: rolling, global. device_path below overrides this selection when set.
+            DeclareLaunchArgument(
+                "camera_type",
+                default_value="rolling",
+                description="Camera type preset: rolling or global",
+            ),
             DeclareLaunchArgument(
                 "device_path",
-                default_value="/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_12MP_SN0001-video-index0",
-                description="Stable Linux camera path like /dev/v4l/by-id/...",
+                default_value="",
+                description="Optional stable Linux camera path override like /dev/v4l/by-id/...",
             ),
             DeclareLaunchArgument(
                 "image_width",

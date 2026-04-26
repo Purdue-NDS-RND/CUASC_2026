@@ -9,14 +9,24 @@ from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 
 
+CAMERA_DEVICE_PATHS = {
+    "rolling": (
+        "/dev/v4l/by-id/"
+        "usb-Arducam_Technology_Co.__Ltd._Arducam_12MP_SN0001-video-index0"
+    ),
+    "global": (
+        "/dev/v4l/by-id/"
+        "usb-Arducam_Technology_Co.__Ltd._Arducam_OV9782_USB_Camera_UC852-video-index0"
+    ),
+}
+
+
 class USBGrabber(Node):
     def __init__(self) -> None:
         super().__init__("usb_grabber")
 
-        self.declare_parameter(
-            "device_path",
-            "/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_12MP_SN0001-video-index0",
-        )
+        self.declare_parameter("camera_type", "rolling")
+        self.declare_parameter("device_path", "")
         self.declare_parameter("image_width", 1280)
         self.declare_parameter("image_height", 720)
         self.declare_parameter("publish_width", 640)
@@ -28,7 +38,12 @@ class USBGrabber(Node):
         self.declare_parameter("publish_compressed", True)
         self.declare_parameter("compressed_quality", 20)
 
-        self._device_path = str(self.get_parameter("device_path").value)
+        self._camera_type = (
+            str(self.get_parameter("camera_type").value).strip().lower()
+        )
+        self._device_path = self._resolve_device_path(
+            str(self.get_parameter("device_path").value)
+        )
         self._width = int(self.get_parameter("image_width").value)
         self._height = int(self.get_parameter("image_height").value)
         self._publish_width = int(self.get_parameter("publish_width").value)
@@ -41,9 +56,6 @@ class USBGrabber(Node):
         self._compressed_quality = int(self.get_parameter("compressed_quality").value)
 
         self._camera_info_msg = self._minimal_camera_info()
-
-        if not self._device_path:
-            raise RuntimeError("device_path must be set for usb_grabber.")
 
         self._resolved_device_path = os.path.realpath(self._device_path)
         self._frame_lock = threading.Lock()
@@ -98,6 +110,7 @@ class USBGrabber(Node):
 
         self.get_logger().info(
             "USBGrabber ready.\n"
+            f"   Camera     : {self._camera_type}\n"
             f"   Device     : {self._device_path}\n"
             f"   Resolved   : {self._resolved_device_path}\n"
             f"   Backend    : {backend_name}\n"
@@ -113,6 +126,20 @@ class USBGrabber(Node):
             "   CameraInfo : minimal only (no intrinsics)"
         )
 
+    def _resolve_device_path(self, device_path_override: str) -> str:
+        device_path = device_path_override.strip()
+        if device_path:
+            return device_path
+
+        if self._camera_type in CAMERA_DEVICE_PATHS:
+            return CAMERA_DEVICE_PATHS[self._camera_type]
+
+        options = ", ".join(sorted(CAMERA_DEVICE_PATHS))
+        raise RuntimeError(
+            f"Unsupported camera_type '{self._camera_type}'. "
+            f"Expected one of: {options}."
+        )
+
     def _minimal_camera_info(self) -> CameraInfo:
         msg = CameraInfo()
         msg.header.frame_id = self._frame_id
@@ -121,21 +148,20 @@ class USBGrabber(Node):
         return msg
 
     def _open_camera(self) -> cv2.VideoCapture:
-        camera = cv2.VideoCapture(self._resolved_device_path)
-        camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        camera = cv2.VideoCapture(self._resolved_device_path, cv2.CAP_V4L2)
+        if not camera.isOpened():
+            raise RuntimeError(
+                "Failed to open USB camera.\n"
+                f"Requested path: {self._device_path}\n"
+                f"Resolved path : {self._resolved_device_path}"
+            )
+
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
+        camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         camera.set(cv2.CAP_PROP_FPS, self._fps)
         camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-        if camera.isOpened():
-            return camera
-
-        raise RuntimeError(
-            "Failed to open USB camera.\n"
-            f"Requested path: {self._device_path}\n"
-            f"Resolved path : {self._resolved_device_path}"
-        )
+        return camera
 
     def _capture_loop(self) -> None:
         while not self._stop_event.is_set():

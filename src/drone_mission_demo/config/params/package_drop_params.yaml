@@ -25,7 +25,28 @@ target_cv:
     start_enabled: false
     compressed_input: false
     min_target_area_px: 25.0
+    min_cluster_area_px: 0.0
+    min_detection_confidence: 0.25
     sim_hsv: true
     hsv_blur_kernel_px: 5
-    morph_kernel_px: 5
+    morph_kernel_px: 3
     mask_blur_kernel_px: 0
+    use_light_normalization: true
+    clahe_clip_limit: 2.0
+    clahe_tile_grid_size_px: 8
+    hsv_red1_h_min: 0
+    hsv_red1_h_max: 12
+    hsv_red2_h_min: 168
+    hsv_red2_h_max: 180
+    hsv_s_min: 70
+    hsv_s_max: 255
+    hsv_v_min: 50
+    hsv_v_max: 255
+    red_dominance_ratio: 1.15
+    red_difference_min: 15
+    red_min_channel: 45
+    cluster_kernel_px: 31
+    cluster_dilate_iterations: 1
+    radial_ray_count: 32
+    radial_sample_count: 80
+    bullseye_min_transitions: 3.0

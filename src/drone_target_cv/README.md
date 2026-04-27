@@ -63,13 +63,24 @@ target_cv:
     sim_hsv: false
 ```
 
-Set `sim_hsv: true` for the broader sim red threshold and `sim_hsv: false`
-for the stricter live/outdoor red threshold.
+`target_cv` detects red target clusters rather than only the largest red
+contour. That lets the same implementation handle both the solid red practice
+circle and the official red/white bullseye with separated rings.
 
-Mask cleanup tuning:
+Mask and cluster tuning:
 - `hsv_blur_kernel_px` smooths the HSV image before thresholding
-- `morph_kernel_px` removes small islands and fills small holes
-- `mask_blur_kernel_px` optionally smooths the final binary mask edges before contour detection
+- `hsv_red*_h_*`, `hsv_s_*`, and `hsv_v_*` define the red HSV bands
+- `red_dominance_ratio`, `red_difference_min`, and `red_min_channel` catch
+  red pixels that shift under outdoor lighting
+- `morph_kernel_px` removes small islands before target grouping
+- `cluster_kernel_px` groups separated bullseye rings into one target candidate
+- `min_detection_confidence` rejects weak red clusters
+
+Debug output:
+- `/target_cv/annotated` shows the selected center, cluster outline, scores,
+  and rejection reason
+- `/target_cv/mask` shows the selected red evidence when a target is accepted,
+  otherwise the cleaned red mask used for diagnosis
 
 Camera type presets:
 

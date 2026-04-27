@@ -27,7 +27,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import CompressedImage, Image
 from std_srvs.srv import SetBool
 
@@ -100,14 +100,20 @@ class TargetCV(Node):
         self._image_size_pub = self.create_publisher(
             PointStamped, "/drone_package_drop/image_size", 10
         )
+        debug_image_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+
         self._annotated_pub = None
         self._mask_pub = None
         if self._debug_enabled:
             self._annotated_pub = self.create_publisher(
-                Image, "/target_cv/annotated", 10
+                Image, "/target_cv/annotated", debug_image_qos
             )
             self._mask_pub = self.create_publisher(
-                Image, "/target_cv/mask", 10
+                Image, "/target_cv/mask", debug_image_qos
             )
 
         self._image_size: tuple[int, int] | None = None

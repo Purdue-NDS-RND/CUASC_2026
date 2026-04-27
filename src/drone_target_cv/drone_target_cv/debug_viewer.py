@@ -3,7 +3,7 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
 
 
@@ -22,33 +22,39 @@ class DebugViewer(Node):
         self._latest_annotated: np.ndarray | None = None
         self._latest_mask: np.ndarray | None = None
 
+        image_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+
         if self._compressed_input:
             self._cam_sub = self.create_subscription(
                 CompressedImage,
                 "camera/image/compressed",
                 self._on_camera_compressed,
-                qos_profile_sensor_data,
+                image_qos,
             )
         else:
             self._cam_sub = self.create_subscription(
                 Image,
                 "camera/image",
                 self._on_camera_raw,
-                qos_profile_sensor_data,
+                image_qos,
             )
 
         self._ann_sub = self.create_subscription(
             Image,
             "/target_cv/annotated",
             self._on_annotated,
-            qos_profile_sensor_data,
+            image_qos,
         )
 
         self._mask_sub = self.create_subscription(
             Image,
             "/target_cv/mask",
             self._on_mask,
-            qos_profile_sensor_data,
+            image_qos,
         )
 
         # 30 Hz display timer
@@ -104,6 +110,8 @@ class DebugViewer(Node):
             if frame is not None:
                 if frame.shape[:2] != (target_h, target_w):
                     frame = cv2.resize(frame, (target_w, target_h))
+                else:
+                    frame = frame.copy()
                 frames.append(frame)
             else:
                 frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))

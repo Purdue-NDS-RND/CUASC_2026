@@ -88,16 +88,23 @@ class DebugViewer(Node):
             return cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
         
         # fallback
-        return np.zeros((360, 640, 3), dtype=np.uint8)
+        return np.zeros((480, 640, 3), dtype=np.uint8)
 
     def _on_timer(self) -> None:
         frames = []
-        target_h, target_w = 360, 640
+        
+        # Use the dimensions of the first available frame rather than hardcoding 16:9
+        available = [f for f in (self._latest_camera, self._latest_annotated, self._latest_mask) if f is not None]
+        if available:
+            target_h, target_w = available[0].shape[:2]
+        else:
+            target_h, target_w = 480, 640
 
         for frame in (self._latest_camera, self._latest_annotated, self._latest_mask):
             if frame is not None:
-                resized = cv2.resize(frame, (target_w, target_h))
-                frames.append(resized)
+                if frame.shape[:2] != (target_h, target_w):
+                    frame = cv2.resize(frame, (target_w, target_h))
+                frames.append(frame)
             else:
                 frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
 

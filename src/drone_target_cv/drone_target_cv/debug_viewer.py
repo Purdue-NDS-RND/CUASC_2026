@@ -53,6 +53,8 @@ class DebugViewer(Node):
 
         # 30 Hz display timer
         self._timer = self.create_timer(1.0 / 30.0, self._on_timer)
+        
+        cv2.namedWindow("Dashboard: Target CV Debug", cv2.WINDOW_NORMAL)
         self.get_logger().info(
             f"Target CV Debug Viewer started (compressed={self._compressed_input}). "
             "Waiting for streams..."
@@ -99,18 +101,18 @@ class DebugViewer(Node):
             else:
                 frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
 
-        # Add labels
+        # Add labels at the bottom left
         labels = ["1) Raw Feed", "2) Annotated CV", "3) Mask CV"]
         for f, label in zip(frames, labels):
             cv2.putText(
-                f, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4, cv2.LINE_AA
+                f, label, (10, target_h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4, cv2.LINE_AA
             )
             cv2.putText(
-                f, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA
+                f, label, (10, target_h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA
             )
 
-        # combine horizontally to create a 3-pane dashboard
-        canvas = np.hstack(frames)
+        # combine vertically to create a 3-pane dashboard
+        canvas = np.vstack(frames)
         
         cv2.imshow("Dashboard: Target CV Debug", canvas)
         cv2.waitKey(1)

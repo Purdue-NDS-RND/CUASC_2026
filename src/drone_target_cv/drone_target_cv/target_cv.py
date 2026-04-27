@@ -27,7 +27,12 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
-from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+from rclpy.qos import (
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 from sensor_msgs.msg import CompressedImage, Image
 from std_srvs.srv import SetBool
 
@@ -60,6 +65,8 @@ class TargetCV(Node):
             min_target_area_px=25.0,
             min_cluster_area_px=0.0,
             min_detection_confidence=0.25,
+            min_solid_score=0.0,
+            min_bullseye_score=0.0,
             hsv_blur_kernel_px=5,
             morph_kernel_px=3,
             mask_blur_kernel_px=0,
@@ -67,15 +74,18 @@ class TargetCV(Node):
             clahe_clip_limit=2.0,
             clahe_tile_grid_size_px=8,
             hsv_red1_h_min=0,
-            hsv_red1_h_max=12,
+            hsv_red1_h_max=8,
             hsv_red2_h_min=168,
             hsv_red2_h_max=180,
-            hsv_s_min=70,
+            hsv_s_min=95,
             hsv_s_max=255,
             hsv_v_min=hsv_v_min,
-            red_dominance_ratio=1.15,
-            red_difference_min=15,
-            red_min_channel=45,
+            hsv_v_max=255,
+            red_dominance_ratio=1.35,
+            red_difference_min=30,
+            red_min_channel=60,
+            red_dominance_s_min=95,
+            red_dominance_v_min=55,
             cluster_kernel_px=31,
             cluster_dilate_iterations=1,
             radial_ray_count=32,

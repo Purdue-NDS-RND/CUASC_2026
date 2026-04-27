@@ -16,6 +16,8 @@ class RedTargetDetectorConfig:
     min_target_area_px: float = 25.0
     min_cluster_area_px: float = 0.0
     min_detection_confidence: float = 0.25
+    min_solid_score: float = 0.0
+    min_bullseye_score: float = 0.0
     hsv_blur_kernel_px: int = 5
     morph_kernel_px: int = 3
     mask_blur_kernel_px: int = 0
@@ -23,16 +25,18 @@ class RedTargetDetectorConfig:
     clahe_clip_limit: float = 2.0
     clahe_tile_grid_size_px: int = 8
     hsv_red1_h_min: int = 0
-    hsv_red1_h_max: int = 12
+    hsv_red1_h_max: int = 8
     hsv_red2_h_min: int = 168
     hsv_red2_h_max: int = 180
-    hsv_s_min: int = 70
+    hsv_s_min: int = 95
     hsv_s_max: int = 255
     hsv_v_min: int = 45
     hsv_v_max: int = 255
-    red_dominance_ratio: float = 1.15
-    red_difference_min: int = 15
-    red_min_channel: int = 45
+    red_dominance_ratio: float = 1.35
+    red_difference_min: int = 30
+    red_min_channel: int = 60
+    red_dominance_s_min: int = 95
+    red_dominance_v_min: int = 55
     cluster_kernel_px: int = 31
     cluster_dilate_iterations: int = 1
     radial_ray_count: int = 32
@@ -151,7 +155,7 @@ class RedTargetDetector:
             ):
                 best_rejected = candidate
 
-            if candidate.confidence < self.config.min_detection_confidence:
+            if not self._candidate_meets_thresholds(candidate):
                 continue
 
             if best_candidate is None:
@@ -226,6 +230,16 @@ class RedTargetDetector:
             return cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
         raise ValueError(f"Unsupported image shape: {image.shape}")
 
+    def _candidate_meets_thresholds(
+        self,
+        candidate: TargetDetectionCandidate,
+    ) -> bool:
+        return (
+            candidate.confidence >= self.config.min_detection_confidence
+            and candidate.solid_score >= self.config.min_solid_score
+            and candidate.bullseye_score >= self.config.min_bullseye_score
+        )
+
     def _build_red_mask(self, bgr: np.ndarray) -> np.ndarray:
         normalized = self._normalize_light(bgr)
         hsv = cv2.cvtColor(normalized, cv2.COLOR_BGR2HSV)
@@ -274,6 +288,7 @@ class RedTargetDetector:
             cv2.inRange(hsv, lower_red2, upper_red2),
         )
 
+        _hue, saturation, value = cv2.split(hsv)
         b_channel, g_channel, r_channel = cv2.split(bgr)
         r_float = r_channel.astype(np.float32)
         g_float = g_channel.astype(np.float32)
@@ -281,11 +296,15 @@ class RedTargetDetector:
         red_floor = max(0.0, float(self.config.red_min_channel))
         red_margin = max(0.0, float(self.config.red_difference_min))
         red_ratio = max(1.0, float(self.config.red_dominance_ratio))
+        dominance_s_min = _clamp_int(self.config.red_dominance_s_min, 0, 255)
+        dominance_v_min = _clamp_int(self.config.red_dominance_v_min, 0, 255)
         dominance = (
             (r_float >= red_floor)
             & (r_float >= (g_float * red_ratio))
             & (r_float >= (b_float * red_ratio))
             & ((r_float - np.maximum(g_float, b_float)) >= red_margin)
+            & (saturation >= dominance_s_min)
+            & (value >= dominance_v_min)
         )
         dominance_mask = np.zeros(hsv_mask.shape, dtype=np.uint8)
         dominance_mask[dominance] = 255

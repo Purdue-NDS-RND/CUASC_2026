@@ -46,108 +46,41 @@ class TargetCV(Node):
         self.declare_parameter("compressed_input", False)
         self.declare_parameter("debug_view", False)
         self.declare_parameter("start_enabled", True)
-        self.declare_parameter("min_target_area_px", 25.0)
         self.declare_parameter("sim_hsv", True)
-        self.declare_parameter("hsv_blur_kernel_px", 5)
-        self.declare_parameter("morph_kernel_px", 5)
-        self.declare_parameter("mask_blur_kernel_px", 0)
-        self.declare_parameter("min_cluster_area_px", 0.0)
-        self.declare_parameter("min_detection_confidence", 0.25)
-        self.declare_parameter("use_light_normalization", True)
-        self.declare_parameter("clahe_clip_limit", 2.0)
-        self.declare_parameter("clahe_tile_grid_size_px", 8)
-        self.declare_parameter("hsv_red1_h_min", 0)
-        self.declare_parameter("hsv_red1_h_max", 12)
-        self.declare_parameter("hsv_red2_h_min", 168)
-        self.declare_parameter("hsv_red2_h_max", 180)
-        self.declare_parameter("hsv_s_min", -1)
-        self.declare_parameter("hsv_s_max", 255)
-        self.declare_parameter("hsv_v_min", -1)
-        self.declare_parameter("hsv_v_max", 255)
-        self.declare_parameter("red_dominance_ratio", 1.15)
-        self.declare_parameter("red_difference_min", 15)
-        self.declare_parameter("red_min_channel", 45)
-        self.declare_parameter("cluster_kernel_px", 31)
-        self.declare_parameter("cluster_dilate_iterations", 1)
-        self.declare_parameter("radial_ray_count", 32)
-        self.declare_parameter("radial_sample_count", 80)
-        self.declare_parameter("bullseye_min_transitions", 3.0)
 
-        image_topic_param = self.get_parameter(
-            "image_topic"
-        ).get_parameter_value()
-        compressed_input_param = self.get_parameter(
-            "compressed_input"
-        ).get_parameter_value()
-        target_area_param = self.get_parameter(
-            "min_target_area_px"
-        ).get_parameter_value()
-        sim_hsv_param = self.get_parameter("sim_hsv").get_parameter_value()
+        self._image_topic = self.get_parameter("image_topic").get_parameter_value().string_value
+        self._compressed_input = self.get_parameter("compressed_input").get_parameter_value().bool_value
+        self._debug_enabled = self.get_parameter("debug_view").get_parameter_value().bool_value
+        start_enabled = self.get_parameter("start_enabled").get_parameter_value().bool_value
+        self._sim_hsv = self.get_parameter("sim_hsv").get_parameter_value().bool_value
 
-        self._image_topic = image_topic_param.string_value
-        self._compressed_input = compressed_input_param.bool_value
-        self._min_target_area_px = target_area_param.double_value
-        self._sim_hsv = sim_hsv_param.bool_value
-        self._hsv_blur_kernel_px = self._odd_kernel_size(
-            self.get_parameter("hsv_blur_kernel_px").value
-        )
-        self._morph_kernel_px = self._odd_kernel_size(
-            self.get_parameter("morph_kernel_px").value
-        )
-        self._mask_blur_kernel_px = self._odd_kernel_size(
-            self.get_parameter("mask_blur_kernel_px").value,
-            allow_disabled=True,
-        )
-        hsv_s_min = self._default_hsv_param(
-            "hsv_s_min",
-            sim_default=70,
-            live_default=70,
-        )
-        hsv_v_min = self._default_hsv_param(
-            "hsv_v_min",
-            sim_default=50,
-            live_default=45,
-        )
+        hsv_v_min = 50 if self._sim_hsv else 45
+
         self._detector_config = RedTargetDetectorConfig(
-            min_target_area_px=self._min_target_area_px,
-            min_cluster_area_px=self._get_float_parameter(
-                "min_cluster_area_px"
-            ),
-            min_detection_confidence=self._get_float_parameter(
-                "min_detection_confidence"
-            ),
-            hsv_blur_kernel_px=self._hsv_blur_kernel_px,
-            morph_kernel_px=self._morph_kernel_px,
-            mask_blur_kernel_px=self._mask_blur_kernel_px,
-            use_light_normalization=self._get_bool_parameter(
-                "use_light_normalization"
-            ),
-            clahe_clip_limit=self._get_float_parameter("clahe_clip_limit"),
-            clahe_tile_grid_size_px=self._get_int_parameter(
-                "clahe_tile_grid_size_px"
-            ),
-            hsv_red1_h_min=self._get_int_parameter("hsv_red1_h_min"),
-            hsv_red1_h_max=self._get_int_parameter("hsv_red1_h_max"),
-            hsv_red2_h_min=self._get_int_parameter("hsv_red2_h_min"),
-            hsv_red2_h_max=self._get_int_parameter("hsv_red2_h_max"),
-            hsv_s_min=hsv_s_min,
-            hsv_s_max=self._get_int_parameter("hsv_s_max"),
+            min_target_area_px=25.0,
+            min_cluster_area_px=0.0,
+            min_detection_confidence=0.25,
+            hsv_blur_kernel_px=5,
+            morph_kernel_px=3,
+            mask_blur_kernel_px=0,
+            use_light_normalization=True,
+            clahe_clip_limit=2.0,
+            clahe_tile_grid_size_px=8,
+            hsv_red1_h_min=0,
+            hsv_red1_h_max=12,
+            hsv_red2_h_min=168,
+            hsv_red2_h_max=180,
+            hsv_s_min=70,
+            hsv_s_max=255,
             hsv_v_min=hsv_v_min,
-            hsv_v_max=self._get_int_parameter("hsv_v_max"),
-            red_dominance_ratio=self._get_float_parameter(
-                "red_dominance_ratio"
-            ),
-            red_difference_min=self._get_int_parameter("red_difference_min"),
-            red_min_channel=self._get_int_parameter("red_min_channel"),
-            cluster_kernel_px=self._get_int_parameter("cluster_kernel_px"),
-            cluster_dilate_iterations=self._get_int_parameter(
-                "cluster_dilate_iterations"
-            ),
-            radial_ray_count=self._get_int_parameter("radial_ray_count"),
-            radial_sample_count=self._get_int_parameter("radial_sample_count"),
-            bullseye_min_transitions=self._get_float_parameter(
-                "bullseye_min_transitions"
-            ),
+            red_dominance_ratio=1.15,
+            red_difference_min=15,
+            red_min_channel=45,
+            cluster_kernel_px=31,
+            cluster_dilate_iterations=1,
+            radial_ray_count=32,
+            radial_sample_count=80,
+            bullseye_min_transitions=3.0,
         )
         self._detector = RedTargetDetector(self._detector_config)
         self._enabled = False
@@ -167,9 +100,6 @@ class TargetCV(Node):
         self._image_size_pub = self.create_publisher(
             PointStamped, "/drone_package_drop/image_size", 10
         )
-        self._debug_enabled = (
-            self.get_parameter("debug_view").get_parameter_value().bool_value
-        )
         self._annotated_pub = None
         self._mask_pub = None
         if self._debug_enabled:
@@ -182,22 +112,12 @@ class TargetCV(Node):
 
         self._image_size: tuple[int, int] | None = None
 
-        start_enabled = self.get_parameter(
-            "start_enabled"
-        ).get_parameter_value().bool_value
         self._set_processing_enabled(start_enabled)
+        
         self.get_logger().info(
             "TargetCV node started - listening on "
             f"'{self._image_topic}' (compressed={self._compressed_input}, "
-            f"sim_hsv={self._sim_hsv}, "
-            f"hsv_blur_kernel_px={self._hsv_blur_kernel_px}, "
-            f"morph_kernel_px={self._morph_kernel_px}, "
-            f"mask_blur_kernel_px={self._mask_blur_kernel_px}, "
-            f"hsv_s_min={self._detector_config.hsv_s_min}, "
-            f"hsv_v_min={self._detector_config.hsv_v_min}, "
-            f"cluster_kernel_px={self._detector_config.cluster_kernel_px}, "
-            f"min_detection_confidence="
-            f"{self._detector_config.min_detection_confidence})"
+            f"sim_hsv={self._sim_hsv})"
         )
 
         self.timer = self.create_timer(1.0, self._timer_callback)
@@ -297,37 +217,6 @@ class TargetCV(Node):
             frame = data.reshape((msg.height, msg.width, 4))
             return cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
         raise ValueError(f"Unsupported image encoding: {msg.encoding}")
-
-    def _get_bool_parameter(self, name: str) -> bool:
-        return self.get_parameter(name).get_parameter_value().bool_value
-
-    def _get_float_parameter(self, name: str) -> float:
-        return float(self.get_parameter(name).value)
-
-    def _get_int_parameter(self, name: str) -> int:
-        return int(self.get_parameter(name).value)
-
-    def _default_hsv_param(
-        self,
-        name: str,
-        *,
-        sim_default: int,
-        live_default: int,
-    ) -> int:
-        value = self._get_int_parameter(name)
-        if value >= 0:
-            return value
-        return sim_default if self._sim_hsv else live_default
-
-    @staticmethod
-    def _odd_kernel_size(value, *, allow_disabled: bool = False) -> int:
-        size = int(value)
-        if allow_disabled and size <= 1:
-            return 0
-        size = max(size, 1)
-        if size % 2 == 0:
-            size += 1
-        return size
 
     @staticmethod
     def _normalize_offset(pixel_value: int, frame_extent: int) -> float:

@@ -44,6 +44,8 @@ Parameters:
       MAVLink stream rate to request from the FCU.
   extended_state_rate_hz      (double, 2.0)
       Explicit rate request for MAVLink EXTENDED_SYS_STATE (message 245).
+  post_arm_settle_s           (double, 0.0)
+      Delay after armed state is confirmed before sending takeoff.
   required_topics             (string[], see defaults)
       List of MAVROS topics that must publish at least once before
       the takeoff sequence proceeds.  Supported topics are those
@@ -97,6 +99,7 @@ class SimpleTakeoffService(Node):
         self.declare_parameter("mode_retry_s", 2.0)
         self.declare_parameter("arm_retry_s", 5.0)
         self.declare_parameter("max_arm_attempts", 5)
+        self.declare_parameter("post_arm_settle_s", 0.0)
         self.declare_parameter("takeoff_retry_s", 5.0)
         self.declare_parameter("loop_rate_hz", 2.0)
         self.declare_parameter("stream_rate_hz", 20)
@@ -113,6 +116,8 @@ class SimpleTakeoffService(Node):
 
         self._last_mode_request = None
         self._last_arm_request = None
+        self._armed_since = None
+        self._post_arm_settle_logged = False
         self._last_takeoff_request = None
         self._arm_attempts = 0
         self._warned_arm_stop = False
@@ -254,6 +259,8 @@ class SimpleTakeoffService(Node):
         self._warned_arm_stop = False
         self._last_mode_request = None
         self._last_arm_request = None
+        self._armed_since = None
+        self._post_arm_settle_logged = False
         self._last_takeoff_request = None
 
         response.success = True
@@ -316,9 +323,31 @@ class SimpleTakeoffService(Node):
             if self._ready_for_request(now, self._last_arm_request, "arm_retry_s"):
                 self._request_arm(True)
                 self._arm_attempts += 1
+            self._armed_since = None
+            self._post_arm_settle_logged = False
             return
 
-        # Step 3: send takeoff command once armed
+        if self._armed_since is None:
+            self._armed_since = now
+            self._post_arm_settle_logged = False
+
+        post_arm_settle_s = (
+            self.get_parameter("post_arm_settle_s")
+            .get_parameter_value()
+            .double_value
+        )
+        post_arm_settle_s = max(0.0, post_arm_settle_s)
+        armed_elapsed_s = (now - self._armed_since).nanoseconds / 1e9
+        if armed_elapsed_s < post_arm_settle_s:
+            if not self._post_arm_settle_logged:
+                self.get_logger().info(
+                    "Vehicle armed; waiting "
+                    f"{post_arm_settle_s:.1f}s before takeoff"
+                )
+                self._post_arm_settle_logged = True
+            return
+
+        # Step 3: send takeoff command after armed settle delay
         if self._ready_for_request(now, self._last_takeoff_request, "takeoff_retry_s"):
             self._request_takeoff(self._pending_altitude_m)
             self._takeoff_sent = True

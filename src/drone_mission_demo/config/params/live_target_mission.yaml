@@ -5,6 +5,7 @@ simple_takeoff_service:
     mode_retry_s: 2.0
     arm_retry_s: 5.0
     max_arm_attempts: 5
+    post_arm_settle_s: 5.0
     takeoff_retry_s: 5.0
     loop_rate_hz: 2.0
     stream_rate_hz: 20

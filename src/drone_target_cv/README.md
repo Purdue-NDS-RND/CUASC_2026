@@ -57,9 +57,11 @@ For more consistent target colors, the USB grabber locks white balance through
 OpenCV by default for the global-shutter camera profile while leaving exposure
 automatic:
 
-```bash
-ros2 launch drone_target_cv usb_grabber.launch.py \
-  manual_white_balance:=4500
+```yaml
+usb_grabber:
+  ros__parameters:
+    lock_white_balance: true
+    manual_white_balance: 4500
 ```
 
 The camera driver defines the valid ranges, so check them on the target machine:

@@ -25,6 +25,7 @@ def generate_launch_description() -> LaunchDescription:
         name="usb_grabber",
         output="screen",
         parameters=[
+            params,
             {
                 "camera_type": LaunchConfiguration("camera_type"),
                 "device_path": LaunchConfiguration("device_path"),
@@ -38,8 +39,6 @@ def generate_launch_description() -> LaunchDescription:
                 "publish_raw": LaunchConfiguration("publish_raw"),
                 "publish_compressed": LaunchConfiguration("publish_compressed"),
                 "compressed_quality": LaunchConfiguration("compressed_quality"),
-                "lock_white_balance": LaunchConfiguration("lock_white_balance"),
-                "manual_white_balance": LaunchConfiguration("manual_white_balance"),
             }
         ],
     )
@@ -151,16 +150,6 @@ def generate_launch_description() -> LaunchDescription:
                 "compressed_quality",
                 default_value="20",
                 description="JPEG quality used for /camera/image/compressed",
-            ),
-            DeclareLaunchArgument(
-                "lock_white_balance",
-                default_value="true",
-                description="Lock camera white balance temperature while leaving exposure automatic",
-            ),
-            DeclareLaunchArgument(
-                "manual_white_balance",
-                default_value="4500",
-                description="Manual V4L2 white balance temperature in kelvin",
             ),
             DeclareLaunchArgument(
                 "sim_hsv",

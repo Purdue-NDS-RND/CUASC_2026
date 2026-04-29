@@ -1,0 +1,4 @@
+usb_grabber:
+  ros__parameters:
+    lock_white_balance: true
+    manual_white_balance: 4500

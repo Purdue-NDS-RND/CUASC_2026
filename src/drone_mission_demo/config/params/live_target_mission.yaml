@@ -18,6 +18,11 @@ mission_executor:
     loop_rate_hz: 20.0
     abort_rtl_mode: "RTL"
 
+usb_grabber:
+  ros__parameters:
+    lock_white_balance: true
+    manual_white_balance: 4500
+
 target_cv:
   ros__parameters:
     image_topic: "camera/image/compressed"

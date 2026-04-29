@@ -1,16 +1,25 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
+    params = PathJoinSubstitution(
+        [
+            FindPackageShare("drone_target_cv"),
+            LaunchConfiguration("params"),
+        ]
+    )
+
     usb_grabber_node = Node(
         package="drone_target_cv",
         executable="usb_grabber",
         name="usb_grabber",
         output="screen",
         parameters=[
+            params,
             {
                 "camera_type": LaunchConfiguration("camera_type"),
                 "device_path": LaunchConfiguration("device_path"),
@@ -24,14 +33,17 @@ def generate_launch_description() -> LaunchDescription:
                 "publish_raw": LaunchConfiguration("publish_raw"),
                 "publish_compressed": LaunchConfiguration("publish_compressed"),
                 "compressed_quality": LaunchConfiguration("compressed_quality"),
-                "lock_white_balance": LaunchConfiguration("lock_white_balance"),
-                "manual_white_balance": LaunchConfiguration("manual_white_balance"),
             }
         ],
     )
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "params",
+                default_value="config/usb_grabber_live.yaml",
+                description="ROS params YAML relative to the drone_target_cv package",
+            ),
             # Options: rolling, global. device_path below overrides this selection when set.
             DeclareLaunchArgument(
                 "camera_type",
@@ -92,16 +104,6 @@ def generate_launch_description() -> LaunchDescription:
                 "compressed_quality",
                 default_value="20",
                 description="JPEG quality used for /camera/image/compressed",
-            ),
-            DeclareLaunchArgument(
-                "lock_white_balance",
-                default_value="true",
-                description="Lock camera white balance temperature while leaving exposure automatic",
-            ),
-            DeclareLaunchArgument(
-                "manual_white_balance",
-                default_value="4500",
-                description="Manual V4L2 white balance temperature in kelvin",
             ),
             usb_grabber_node,
         ]

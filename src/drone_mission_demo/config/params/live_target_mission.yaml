@@ -36,6 +36,20 @@ usb_grabber:
     reset_v4l2_controls: true
     lock_white_balance: true
     manual_white_balance: 4500
+    # Negative values leave the camera auto/default for that control.
+    # Exact ranges vary by camera; run: v4l2-ctl -d <camera> --list-ctrls
+    brightness: -1               # Typical 0-255 or -64-64; higher brightens image, too high washes red pink/white.
+    contrast: -1                 # Typical 0-64 or 0-255; higher separates red/white, too high crushes dark detail.
+    saturation: -1               # Typical 0-128 or 0-255; higher makes red vivid, low makes red pale/pink/gray.
+    hue: -1                      # Typical -40-40 or -180-180; shifts all colors, avoid unless red hue is rotated.
+    gamma: -1                    # Typical 72-500; higher lifts midtones, too high makes red look faded.
+    gain: -1                     # Typical 0-100 or 0-255; higher brightens sensor signal, high adds noise/pink tint.
+    sharpness: -1                # Typical 0-6 or 0-255; higher sharpens edges, high adds halos/red speckles.
+    backlight_compensation: -1   # Typical 0-1 or 0-2; helps dark target on bright field, can over-brighten.
+    power_line_frequency: -1     # Typical 0=off, 1=50Hz, 2=60Hz; indoor flicker control, usually irrelevant outdoors.
+    exposure_dynamic_framerate: -1  # Typical 0-1; 1 may brighten by reducing actual FPS.
+    auto_exposure: -1            # Typical 1=manual, 3=auto on UVC; -1 leaves auto/default.
+    exposure_time_absolute: -1   # Typical 1-10000; higher is brighter/longer exposure, high blurs and washes red.
 
 target_cv:
   ros__parameters:

@@ -53,6 +53,10 @@ target_cv:
     start_enabled: false
     compressed_input: true
     sim_hsv: false
+    min_circularity: 0.4
+    hsv_blur_kernel_px: 5
+    morph_kernel_px: 7
+    mask_blur_kernel_px: 5
 
 session_logger:
   ros__parameters:

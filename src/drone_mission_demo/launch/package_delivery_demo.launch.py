@@ -63,7 +63,7 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument(
                 "params",
-                default_value="config/params/package_drop_params.yaml",
+                default_value="config/params/sim_target_mission.yaml",
                 description="ROS params YAML relative to the drone_mission_demo package",
             ),
             DeclareLaunchArgument(

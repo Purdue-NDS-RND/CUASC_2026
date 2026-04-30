@@ -1,10 +1,9 @@
 # drone_target_cv
 
-ROS2 Python package for the camera compression and target-tracking nodes used by
+ROS2 Python package for the USB camera and target-tracking nodes used by
 `drone_mission_demo`.
 
 Current nodes:
-- `compressed_grabber`
 - `target_cv`
 - `usb_grabber`
 

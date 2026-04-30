@@ -36,7 +36,6 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "compressed_grabber = drone_target_cv.compressed_grabber:main",
             "target_cv = drone_target_cv.target_cv:main",
             "usb_grabber = drone_target_cv.usb_grabber:main",
             "debug_viewer = drone_target_cv.debug_viewer:main",

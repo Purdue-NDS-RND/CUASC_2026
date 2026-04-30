@@ -52,12 +52,14 @@ class TargetCV(Node):
         self.declare_parameter("debug_view", False)
         self.declare_parameter("start_enabled", True)
         self.declare_parameter("sim_hsv", True)
+        self.declare_parameter("min_circularity", 0.4)
 
         self._image_topic = self.get_parameter("image_topic").get_parameter_value().string_value
         self._compressed_input = self.get_parameter("compressed_input").get_parameter_value().bool_value
         self._debug_enabled = self.get_parameter("debug_view").get_parameter_value().bool_value
         start_enabled = self.get_parameter("start_enabled").get_parameter_value().bool_value
         self._sim_hsv = self.get_parameter("sim_hsv").get_parameter_value().bool_value
+        min_circularity = float(self.get_parameter("min_circularity").value)
 
         hsv_v_min = 50 if self._sim_hsv else 45
 
@@ -65,6 +67,7 @@ class TargetCV(Node):
             min_target_area_px=25.0,
             min_cluster_area_px=0.0,
             min_detection_confidence=0.25,
+            min_circularity=min_circularity,
             min_solid_score=0.0,
             min_bullseye_score=0.0,
             hsv_blur_kernel_px=5,
@@ -149,7 +152,8 @@ class TargetCV(Node):
                 f"Current detection: x_norm={x_norm:.3f}, "
                 f"y_norm={y_norm:.3f}, area={area:.0f}, "
                 f"confidence={confidence:.2f}, solid_score={solid_score:.2f}, "
-                f"bullseye_score={bullseye_score:.2f}"
+                f"bullseye_score={bullseye_score:.2f}, "
+                f"circularity={self.last_result.circularity:.2f}"
             )
         else:
             if self.last_result is None:
@@ -162,6 +166,7 @@ class TargetCV(Node):
                 f"clean_red_area_px={self.last_result.clean_red_area_px}, "
                 f"cluster_count={self.last_result.cluster_count}, "
                 f"best_confidence={self.last_result.confidence:.2f}, "
+                f"circularity={self.last_result.circularity:.2f}, "
                 f"solid_score={self.last_result.solid_score:.2f}, "
                 f"bullseye_score={self.last_result.bullseye_score:.2f}"
             )

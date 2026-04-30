@@ -16,6 +16,7 @@ class RedTargetDetectorConfig:
     min_target_area_px: float = 25.0
     min_cluster_area_px: float = 0.0
     min_detection_confidence: float = 0.25
+    min_circularity: float = 0.4
     min_solid_score: float = 0.0
     min_bullseye_score: float = 0.0
     hsv_blur_kernel_px: int = 5
@@ -184,7 +185,7 @@ class RedTargetDetector:
                 raw_red_area_px,
                 clean_red_area_px,
                 cluster_count,
-                "best candidate below confidence threshold",
+                self._candidate_reject_reason(best_rejected),
                 clean_red_mask,
                 cluster_mask,
                 accepted=False,
@@ -236,9 +237,24 @@ class RedTargetDetector:
     ) -> bool:
         return (
             candidate.confidence >= self.config.min_detection_confidence
+            and candidate.circularity >= self.config.min_circularity
             and candidate.solid_score >= self.config.min_solid_score
             and candidate.bullseye_score >= self.config.min_bullseye_score
         )
+
+    def _candidate_reject_reason(
+        self,
+        candidate: TargetDetectionCandidate,
+    ) -> str:
+        if candidate.circularity < self.config.min_circularity:
+            return "best candidate below circularity threshold"
+        if candidate.confidence < self.config.min_detection_confidence:
+            return "best candidate below confidence threshold"
+        if candidate.solid_score < self.config.min_solid_score:
+            return "best candidate below solid-score threshold"
+        if candidate.bullseye_score < self.config.min_bullseye_score:
+            return "best candidate below bullseye-score threshold"
+        return "best candidate below detection thresholds"
 
     def _build_red_mask(self, bgr: np.ndarray) -> np.ndarray:
         normalized = self._normalize_light(bgr)

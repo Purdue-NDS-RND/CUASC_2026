@@ -58,3 +58,4 @@ target_cv:
     start_enabled: false
     compressed_input: true
     sim_hsv: false
+    min_circularity: 0.4  # 1.0 is circle-like; reject long/irregular red blobs below this.

@@ -39,8 +39,8 @@ usb_grabber:
     # Negative values leave the camera auto/default for that control.
     # Exact ranges vary by camera; run: v4l2-ctl -d <camera> --list-ctrls
     brightness: 10               # Typical 0-255 or -64-64; higher brightens image, too high washes red pink/white.
-    contrast: -1                 # Typical 0-64 or 0-255; higher separates red/white, too high crushes dark detail.
-    saturation: 100               # Typical 0-128 or 0-255; higher makes red vivid, low makes red pale/pink/gray.
+    contrast: 2                 # Typical 0-64 or 0-255; higher separates red/white, too high crushes dark detail.
+    saturation: 180               # Typical 0-128 or 0-255; higher makes red vivid, low makes red pale/pink/gray.
     hue: -1                      # Typical -40-40 or -180-180; shifts all colors, avoid unless red hue is rotated.
     gamma: -1                    # Typical 72-500; higher lifts midtones, too high makes red look faded.
     gain: 0                     # Typical 0-100 or 0-255; higher brightens sensor signal, high adds noise/pink tint.

@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 
 import cv2
 import rclpy
@@ -25,10 +27,27 @@ CAMERA_CONTROL_PROFILES = {
     "global": {
         "lock_white_balance": True,
         "manual_white_balance": 4500,
+        "reset_v4l2_controls": True,
+        "default_v4l2_controls": {
+            "brightness": 0,
+            "contrast": 32,
+            "saturation": 90,
+            "hue": 0,
+            "white_balance_automatic": 1,
+            "gamma": 100,
+            "gain": 0,
+            "power_line_frequency": 2,
+            "sharpness": 3,
+            "backlight_compensation": 1,
+            "auto_exposure": 3,
+            "exposure_dynamic_framerate": 0,
+        },
     },
     "rolling": {
         "lock_white_balance": False,
         "manual_white_balance": -1,
+        "reset_v4l2_controls": False,
+        "default_v4l2_controls": {},
     },
 }
 
@@ -65,6 +84,10 @@ class USBGrabber(Node):
             "manual_white_balance",
             control_profile["manual_white_balance"],
         )
+        self.declare_parameter(
+            "reset_v4l2_controls",
+            control_profile["reset_v4l2_controls"],
+        )
 
         self._device_path = self._resolve_device_path(
             str(self.get_parameter("device_path").value)
@@ -85,6 +108,10 @@ class USBGrabber(Node):
         self._manual_white_balance = int(
             self.get_parameter("manual_white_balance").value
         )
+        self._reset_v4l2_controls = bool(
+            self.get_parameter("reset_v4l2_controls").value
+        )
+        self._default_v4l2_controls = control_profile["default_v4l2_controls"]
 
         self._camera_info_msg = self._minimal_camera_info()
 
@@ -120,6 +147,7 @@ class USBGrabber(Node):
 
         self._camera = self._open_camera()
         self._apply_camera_controls()
+        self._apply_v4l2_camera_controls()
 
         self._capture_thread = threading.Thread(
             target=self._capture_loop,
@@ -195,6 +223,82 @@ class USBGrabber(Node):
         camera.set(cv2.CAP_PROP_FPS, self._fps)
         camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return camera
+
+    def _apply_v4l2_camera_controls(self) -> None:
+        if not self._reset_v4l2_controls and not self._lock_white_balance:
+            return
+
+        v4l2_ctl = shutil.which("v4l2-ctl")
+        if v4l2_ctl is None:
+            self.get_logger().warn(
+                "v4l2-ctl is not available; falling back to OpenCV white balance controls."
+            )
+            return
+
+        if self._reset_v4l2_controls:
+            self._set_v4l2_controls(
+                v4l2_ctl,
+                self._default_v4l2_controls,
+                "default image controls",
+            )
+
+        if not self._lock_white_balance:
+            return
+
+        controls = {"white_balance_automatic": 0}
+        if self._manual_white_balance >= 0:
+            controls["white_balance_temperature"] = self._manual_white_balance
+
+        self._set_v4l2_controls(v4l2_ctl, controls, "white balance controls")
+
+    def _set_v4l2_controls(
+        self,
+        v4l2_ctl: str,
+        controls: dict[str, int],
+        label: str,
+    ) -> None:
+        if not controls:
+            return
+
+        try:
+            result = subprocess.run(
+                [
+                    v4l2_ctl,
+                    "-d",
+                    self._resolved_device_path,
+                    "--set-ctrl",
+                    ",".join(
+                        f"{control_name}={control_value}"
+                        for control_name, control_value in controls.items()
+                    ),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+        except subprocess.TimeoutExpired:
+            self.get_logger().warn("Timed out while applying V4L2 camera controls.")
+            return
+        except OSError as exc:
+            self.get_logger().warn(f"Failed to run v4l2-ctl: {exc}")
+            return
+
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            self.get_logger().warn(
+                f"v4l2-ctl did not accept {label}"
+                + (f": {detail}" if detail else ".")
+            )
+            return
+
+        self.get_logger().info(
+            f"Applied V4L2 {label}: "
+            + ", ".join(
+                f"{control_name}={control_value}"
+                for control_name, control_value in controls.items()
+            )
+        )
 
     def _apply_camera_controls(self) -> None:
         if not self._lock_white_balance:

@@ -39,6 +39,9 @@ def generate_launch_description() -> LaunchDescription:
                 "publish_raw": LaunchConfiguration("publish_raw"),
                 "publish_compressed": LaunchConfiguration("publish_compressed"),
                 "compressed_quality": LaunchConfiguration("compressed_quality"),
+                "reset_v4l2_controls": LaunchConfiguration("reset_v4l2_controls"),
+                "lock_white_balance": LaunchConfiguration("lock_white_balance"),
+                "manual_white_balance": LaunchConfiguration("manual_white_balance"),
             }
         ],
     )
@@ -150,6 +153,21 @@ def generate_launch_description() -> LaunchDescription:
                 "compressed_quality",
                 default_value="20",
                 description="JPEG quality used for /camera/image/compressed",
+            ),
+            DeclareLaunchArgument(
+                "reset_v4l2_controls",
+                default_value="true",
+                description="Reset global-camera V4L2 image controls to their defaults before white balance",
+            ),
+            DeclareLaunchArgument(
+                "lock_white_balance",
+                default_value="true",
+                description="Disable automatic white balance and use manual_white_balance",
+            ),
+            DeclareLaunchArgument(
+                "manual_white_balance",
+                default_value="4500",
+                description="Manual white balance temperature for V4L2/OpenCV controls",
             ),
             DeclareLaunchArgument(
                 "sim_hsv",

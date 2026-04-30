@@ -2,21 +2,18 @@
 Target CV Node - Detect a coloured target from a downward-facing camera.
 
 Subscribes to:
-  camera/image              (sensor_msgs/Image)            - raw camera frame
-  camera/image/compressed   (sensor_msgs/CompressedImage)  - compressed camera frame
+  camera/image - raw sensor_msgs/Image frames
+  camera/image/compressed - sensor_msgs/CompressedImage frames
 
 Publishes:
-  /drone_package_drop/target_detection  (PointStamped)  - centered normalized
-                                                          target offsets in [-1, 1]
-  /drone_package_drop/image_size        (PointStamped)  - raw image width/height
-                                                          for observability/debugging
-  /target_cv/annotated                  (sensor_msgs/Image) - annotated debug stream
-                                                              when debug_view=True
-  /target_cv/mask                       (sensor_msgs/Image) - cleaned red mask as mono8
-                                                              when debug_view=True
+  /drone_package_drop/target_detection - normalized target offsets
+  /drone_package_drop/image_size - raw image width/height
+  /target_cv/annotated - annotated debug stream when debug_view=True
+  /target_cv/mask - cleaned red mask as mono8 when debug_view=True
 
-The detection uses a simple HSV colour filter. Tune the HSV bounds
-via parameters to match whatever colour your ground target is.
+The detection uses a red-pixel target cluster detector that supports both a
+solid red practice circle and the official red/white bullseye target. Tune the
+HSV and red-dominance parameters to match the current camera and light.
 
 Parameters:
   image_topic       Camera topic name            (default "camera/image")
@@ -30,9 +27,20 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 from sensor_msgs.msg import CompressedImage, Image
 from std_srvs.srv import SetBool
+
+from drone_target_cv.target_detector import (
+    RedTargetDetector,
+    RedTargetDetectorConfig,
+    draw_debug_overlay,
+)
 
 
 class TargetCV(Node):
@@ -43,37 +51,52 @@ class TargetCV(Node):
         self.declare_parameter("compressed_input", False)
         self.declare_parameter("debug_view", False)
         self.declare_parameter("start_enabled", True)
-        self.declare_parameter("min_target_area_px", 25.0)
         self.declare_parameter("sim_hsv", True)
-        self.declare_parameter("hsv_blur_kernel_px", 5)
-        self.declare_parameter("morph_kernel_px", 5)
-        self.declare_parameter("mask_blur_kernel_px", 0)
 
-        self._image_topic = (
-            self.get_parameter("image_topic").get_parameter_value().string_value
+        self._image_topic = self.get_parameter("image_topic").get_parameter_value().string_value
+        self._compressed_input = self.get_parameter("compressed_input").get_parameter_value().bool_value
+        self._debug_enabled = self.get_parameter("debug_view").get_parameter_value().bool_value
+        start_enabled = self.get_parameter("start_enabled").get_parameter_value().bool_value
+        self._sim_hsv = self.get_parameter("sim_hsv").get_parameter_value().bool_value
+
+        hsv_v_min = 50 if self._sim_hsv else 45
+
+        self._detector_config = RedTargetDetectorConfig(
+            min_target_area_px=25.0,
+            min_cluster_area_px=0.0,
+            min_detection_confidence=0.25,
+            min_solid_score=0.0,
+            min_bullseye_score=0.0,
+            hsv_blur_kernel_px=5,
+            morph_kernel_px=3,
+            mask_blur_kernel_px=0,
+            use_light_normalization=True,
+            clahe_clip_limit=2.0,
+            clahe_tile_grid_size_px=8,
+            hsv_red1_h_min=0,
+            hsv_red1_h_max=8,
+            hsv_red2_h_min=168,
+            hsv_red2_h_max=180,
+            hsv_s_min=95,
+            hsv_s_max=255,
+            hsv_v_min=hsv_v_min,
+            hsv_v_max=255,
+            red_dominance_ratio=1.35,
+            red_difference_min=30,
+            red_min_channel=60,
+            red_dominance_s_min=95,
+            red_dominance_v_min=55,
+            cluster_kernel_px=31,
+            cluster_dilate_iterations=1,
+            radial_ray_count=32,
+            radial_sample_count=80,
+            bullseye_min_transitions=3.0,
         )
-        self._compressed_input = (
-            self.get_parameter("compressed_input").get_parameter_value().bool_value
-        )
-        self._min_target_area_px = (
-            self.get_parameter("min_target_area_px").get_parameter_value().double_value
-        )
-        self._sim_hsv = (
-            self.get_parameter("sim_hsv").get_parameter_value().bool_value
-        )
-        self._hsv_blur_kernel_px = self._odd_kernel_size(
-            self.get_parameter("hsv_blur_kernel_px").value
-        )
-        self._morph_kernel_px = self._odd_kernel_size(
-            self.get_parameter("morph_kernel_px").value
-        )
-        self._mask_blur_kernel_px = self._odd_kernel_size(
-            self.get_parameter("mask_blur_kernel_px").value,
-            allow_disabled=True,
-        )
+        self._detector = RedTargetDetector(self._detector_config)
         self._enabled = False
         self._image_sub = None
         self.last_detection = None
+        self.last_result = None
 
         self._enable_service = self.create_service(
             SetBool,
@@ -87,31 +110,30 @@ class TargetCV(Node):
         self._image_size_pub = self.create_publisher(
             PointStamped, "/drone_package_drop/image_size", 10
         )
-        self._debug_enabled = (
-            self.get_parameter("debug_view").get_parameter_value().bool_value
+        debug_image_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
         )
+
         self._annotated_pub = None
         self._mask_pub = None
         if self._debug_enabled:
             self._annotated_pub = self.create_publisher(
-                Image, "/target_cv/annotated", 10
+                Image, "/target_cv/annotated", debug_image_qos
             )
             self._mask_pub = self.create_publisher(
-                Image, "/target_cv/mask", 10
+                Image, "/target_cv/mask", debug_image_qos
             )
 
         self._image_size: tuple[int, int] | None = None
 
-        self._set_processing_enabled(
-            self.get_parameter("start_enabled").get_parameter_value().bool_value
-        )
+        self._set_processing_enabled(start_enabled)
+        
         self.get_logger().info(
             "TargetCV node started - listening on "
             f"'{self._image_topic}' (compressed={self._compressed_input}, "
-            f"sim_hsv={self._sim_hsv}, "
-            f"hsv_blur_kernel_px={self._hsv_blur_kernel_px}, "
-            f"morph_kernel_px={self._morph_kernel_px}, "
-            f"mask_blur_kernel_px={self._mask_blur_kernel_px})"
+            f"sim_hsv={self._sim_hsv})"
         )
 
         self.timer = self.create_timer(1.0, self._timer_callback)
@@ -120,13 +142,29 @@ class TargetCV(Node):
         if not self._enabled:
             return
         if self.last_detection:
-            x_norm, y_norm, area = self.last_detection
+            x_norm, y_norm, area, confidence, solid_score, bullseye_score = (
+                self.last_detection
+            )
             self.get_logger().info(
                 f"Current detection: x_norm={x_norm:.3f}, "
-                f"y_norm={y_norm:.3f}, area={area}"
+                f"y_norm={y_norm:.3f}, area={area:.0f}, "
+                f"confidence={confidence:.2f}, solid_score={solid_score:.2f}, "
+                f"bullseye_score={bullseye_score:.2f}"
             )
         else:
-            self.get_logger().info("No target detected.")
+            if self.last_result is None:
+                self.get_logger().info("No target detected.")
+                return
+            self.get_logger().info(
+                "No target detected: "
+                f"reason='{self.last_result.reject_reason}', "
+                f"raw_red_area_px={self.last_result.raw_red_area_px}, "
+                f"clean_red_area_px={self.last_result.clean_red_area_px}, "
+                f"cluster_count={self.last_result.cluster_count}, "
+                f"best_confidence={self.last_result.confidence:.2f}, "
+                f"solid_score={self.last_result.solid_score:.2f}, "
+                f"bullseye_score={self.last_result.bullseye_score:.2f}"
+            )
 
     def _handle_enable_request(
         self,
@@ -148,9 +186,10 @@ class TargetCV(Node):
 
         if enabled:
             msg_type = CompressedImage if self._compressed_input else Image
-            callback = (
-                self._on_compressed_image if self._compressed_input else self._on_image
-            )
+            if self._compressed_input:
+                callback = self._on_compressed_image
+            else:
+                callback = self._on_image
             self._image_sub = self.create_subscription(
                 msg_type,
                 self._image_topic,
@@ -166,6 +205,7 @@ class TargetCV(Node):
             self._image_sub = None
         self._enabled = False
         self.last_detection = None
+        self.last_result = None
         self._image_size = None
         self._publish_not_found_detection()
         self.get_logger().info("Target detection disabled")
@@ -195,88 +235,6 @@ class TargetCV(Node):
         raise ValueError(f"Unsupported image encoding: {msg.encoding}")
 
     @staticmethod
-    def _odd_kernel_size(value, *, allow_disabled: bool = False) -> int:
-        size = int(value)
-        if allow_disabled and size <= 1:
-            return 0
-        size = max(size, 1)
-        if size % 2 == 0:
-            size += 1
-        return size
-
-    def _detect_target_center(self, image):
-        annotated = image.copy()
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        blur = cv2.GaussianBlur(
-            hsv,
-            (self._hsv_blur_kernel_px, self._hsv_blur_kernel_px),
-            0,
-        )
-
-        if self._sim_hsv:
-            lower_red1 = np.array([0, 70, 50])
-            upper_red1 = np.array([10, 255, 255])
-            lower_red2 = np.array([170, 70, 50])
-            upper_red2 = np.array([180, 255, 255])
-        else:
-            lower_red1 = np.array([0, 120, 80])
-            upper_red1 = np.array([10, 255, 255])
-            lower_red2 = np.array([170, 120, 80])
-            upper_red2 = np.array([180, 255, 255])
-
-        mask1 = cv2.inRange(blur, lower_red1, upper_red1)
-        mask2 = cv2.inRange(blur, lower_red2, upper_red2)
-        mask = cv2.bitwise_or(mask1, mask2)
-
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE,
-            (self._morph_kernel_px, self._morph_kernel_px),
-        )
-        clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel)
-        if self._mask_blur_kernel_px:
-            clean = cv2.GaussianBlur(
-                clean,
-                (self._mask_blur_kernel_px, self._mask_blur_kernel_px),
-                0,
-            )
-            _, clean = cv2.threshold(clean, 127, 255, cv2.THRESH_BINARY)
-
-        contours, _ = cv2.findContours(
-            clean,
-            cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE,
-        )
-        blank_mask = np.zeros(clean.shape, dtype=np.uint8)
-        if not contours:
-            return annotated, blank_mask, None, None
-
-        largest_contour = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(largest_contour)
-        if area < self._min_target_area_px:
-            return annotated, blank_mask, None, None
-
-        moments = cv2.moments(largest_contour)
-        if moments["m00"] == 0:
-            return annotated, blank_mask, None, None
-
-        center_x = int(moments["m10"] / moments["m00"])
-        center_y = int(moments["m01"] / moments["m00"])
-
-        cv2.drawMarker(
-            annotated,
-            (center_x, center_y),
-            (0, 255, 0),
-            markerType=cv2.MARKER_CROSS,
-            markerSize=22,
-            thickness=2,
-        )
-        cv2.circle(annotated, (center_x, center_y), 5, (0, 0, 255), -1)
-        cv2.drawContours(annotated, [largest_contour], -1, (255, 0, 0), 2)
-
-        return annotated, clean, (center_x, center_y), area
-
-    @staticmethod
     def _normalize_offset(pixel_value: int, frame_extent: int) -> float:
         return ((float(pixel_value) / float(frame_extent)) * 2.0) - 1.0
 
@@ -298,7 +256,13 @@ class TargetCV(Node):
             self._image_size_pub.publish(dims)
             self.get_logger().info(f"Image size: {width}x{height}")
 
-        annotated, clean_mask, center, area = self._detect_target_center(frame)
+        result = self._detector.detect(frame)
+        self.last_result = result
+        annotated = draw_debug_overlay(frame, result)
+        if result.accepted:
+            clean_mask = result.selected_red_mask
+        else:
+            clean_mask = result.clean_red_mask
 
         if self._annotated_pub is not None:
             annotated = np.ascontiguousarray(annotated)
@@ -327,8 +291,8 @@ class TargetCV(Node):
                 )
             )
 
-        if center is not None:
-            center_x, center_y = center
+        if result.center is not None:
+            center_x, center_y = result.center
             x_norm = self._normalize_offset(center_x, width)
             y_norm = self._normalize_offset(center_y, height)
             det = PointStamped()
@@ -336,9 +300,16 @@ class TargetCV(Node):
             det.header.frame_id = "camera"
             det.point.x = x_norm
             det.point.y = y_norm
-            det.point.z = float(area) if area is not None else 0.0
+            det.point.z = float(result.red_area_px)
             self._detection_pub.publish(det)
-            self.last_detection = (x_norm, y_norm, area)
+            self.last_detection = (
+                x_norm,
+                y_norm,
+                result.red_area_px,
+                result.confidence,
+                result.solid_score,
+                result.bullseye_score,
+            )
         else:
             self.last_detection = None
             self._publish_not_found_detection()

@@ -25,8 +25,4 @@ target_cv:
     debug_view: true
     start_enabled: false
     compressed_input: false
-    min_target_area_px: 25.0
     sim_hsv: true
-    hsv_blur_kernel_px: 5
-    morph_kernel_px: 5
-    mask_blur_kernel_px: 0

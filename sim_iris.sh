@@ -3,7 +3,7 @@ set -euo pipefail
 
 print_usage() {
     echo "Usage: $0 [--unlock] [--no-rviz] [--help]"
-    echo "  default     Launch iris sim with the gimbal/camera mechanically locked"
+    echo "  default     Launch iris sim with a hard-mounted downward camera"
     echo "  --unlock    Launch the original free-moving gimbal model"
     echo "  --no-rviz   Do not open RViz"
 }

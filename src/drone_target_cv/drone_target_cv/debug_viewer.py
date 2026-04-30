@@ -1,0 +1,151 @@
+import cv2
+import numpy as np
+
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import CompressedImage, Image
+
+
+class DebugViewer(Node):
+    """
+    Combines the raw camera, annotated view, and mask into a single window.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("debug_viewer")
+
+        self.declare_parameter("compressed_input", False)
+        self._compressed_input = self.get_parameter("compressed_input").value
+
+        self._latest_camera: np.ndarray | None = None
+        self._latest_annotated: np.ndarray | None = None
+        self._latest_mask: np.ndarray | None = None
+
+        image_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+
+        if self._compressed_input:
+            self._cam_sub = self.create_subscription(
+                CompressedImage,
+                "camera/image/compressed",
+                self._on_camera_compressed,
+                image_qos,
+            )
+        else:
+            self._cam_sub = self.create_subscription(
+                Image,
+                "camera/image",
+                self._on_camera_raw,
+                image_qos,
+            )
+
+        self._ann_sub = self.create_subscription(
+            Image,
+            "/target_cv/annotated",
+            self._on_annotated,
+            image_qos,
+        )
+
+        self._mask_sub = self.create_subscription(
+            Image,
+            "/target_cv/mask",
+            self._on_mask,
+            image_qos,
+        )
+
+        # 30 Hz display timer
+        self._timer = self.create_timer(1.0 / 30.0, self._on_timer)
+        
+        cv2.namedWindow("Dashboard: Target CV Debug", cv2.WINDOW_NORMAL)
+        self.get_logger().info(
+            f"Target CV Debug Viewer started (compressed={self._compressed_input}). "
+            "Waiting for streams..."
+        )
+
+    def _on_camera_raw(self, msg: Image) -> None:
+        self._latest_camera = self._imgmsg_to_cv2(msg)
+
+    def _on_camera_compressed(self, msg: CompressedImage) -> None:
+        np_arr = np.frombuffer(msg.data, np.uint8)
+        self._latest_camera = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    def _on_annotated(self, msg: Image) -> None:
+        self._latest_annotated = self._imgmsg_to_cv2(msg)
+
+    def _on_mask(self, msg: Image) -> None:
+        self._latest_mask = self._imgmsg_to_cv2(msg)
+
+    def _imgmsg_to_cv2(self, msg: Image) -> np.ndarray:
+        data = np.frombuffer(msg.data, dtype=np.uint8)
+        if msg.encoding == "rgb8":
+            frame = data.reshape((msg.height, msg.width, 3))
+            return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        if msg.encoding == "bgr8":
+            return data.reshape((msg.height, msg.width, 3))
+        if msg.encoding == "mono8":
+            frame = data.reshape((msg.height, msg.width))
+            return cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        if msg.encoding == "rgba8":
+            frame = data.reshape((msg.height, msg.width, 4))
+            return cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+        
+        # fallback
+        return np.zeros((480, 640, 3), dtype=np.uint8)
+
+    def _on_timer(self) -> None:
+        frames = []
+        
+        # Use the dimensions of the first available frame rather than hardcoding 16:9
+        available = [f for f in (self._latest_camera, self._latest_annotated, self._latest_mask) if f is not None]
+        if available:
+            target_h, target_w = available[0].shape[:2]
+        else:
+            target_h, target_w = 480, 640
+
+        for frame in (self._latest_camera, self._latest_annotated, self._latest_mask):
+            if frame is not None:
+                if frame.shape[:2] != (target_h, target_w):
+                    frame = cv2.resize(frame, (target_w, target_h))
+                else:
+                    frame = frame.copy()
+                frames.append(frame)
+            else:
+                frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
+
+        # Add labels at the bottom left
+        labels = ["1) Raw Feed", "2) Annotated CV", "3) Mask CV"]
+        for f, label in zip(frames, labels):
+            cv2.putText(
+                f, label, (10, target_h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4, cv2.LINE_AA
+            )
+            cv2.putText(
+                f, label, (10, target_h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA
+            )
+
+        # combine vertically to create a 3-pane dashboard
+        canvas = np.vstack(frames)
+        
+        cv2.imshow("Dashboard: Target CV Debug", canvas)
+        cv2.waitKey(1)
+
+
+def main(args=None) -> None:
+    rclpy.init(args=args)
+    node = DebugViewer()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        cv2.destroyAllWindows()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

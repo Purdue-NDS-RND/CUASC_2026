@@ -21,20 +21,7 @@ mission_executor:
 
 usb_grabber:
   ros__parameters:
-    camera_type: "global"
-    device_path: ""
-    image_width: 640
-    image_height: 480
-    publish_width: 640
-    publish_height: 480
-    fps: 60.0
-    image_publishing_rate: 30.0
-    frame_id: "camera_link"
-    publish_raw: false
-    publish_compressed: true
-    compressed_quality: 20
-    reset_v4l2_controls: true
-    lock_white_balance: false
+    lock_white_balance: true
     manual_white_balance: 4500
     # Negative values leave the camera auto/default for that control.
     # Exact ranges vary by camera; run: v4l2-ctl -d <camera> --list-ctrls
@@ -58,4 +45,3 @@ target_cv:
     start_enabled: false
     compressed_input: true
     sim_hsv: false
-    min_circularity: 0.4  # 1.0 is circle-like; reject long/irregular red blobs below this.

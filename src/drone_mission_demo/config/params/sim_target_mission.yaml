@@ -27,3 +27,15 @@ target_cv:
     compressed_input: false
     sim_hsv: true
     min_circularity: 0.4  # 1.0 is circle-like; reject long/irregular red blobs below this.
+
+session_logger:
+  ros__parameters:
+    output_base: "~/cuasc_logs"
+    session_name: "demo"
+    image_interval_s: 1.0
+    command_topic: "/mavros/setpoint_raw/local"
+    camera_topic: "/camera/image"
+    camera_compressed_input: false
+    annotated_topic: "/target_cv/annotated"
+    mask_topic: "/target_cv/mask"
+    debug_topic_warn_after_s: 5.0

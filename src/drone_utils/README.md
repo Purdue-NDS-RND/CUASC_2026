@@ -129,6 +129,26 @@ ros2 service call drone_utils/set_gimbal_point mavros_msgs/srv/GimbalManagerPitc
 
 ---
 
+### `session_logger`
+
+Mission-session logger that creates one timestamped folder per run and records
+controller commands plus image snapshots.
+
+**Default outputs:**
+| Path | Description |
+|---|---|
+| `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/metadata.json` | Session metadata and subscribed topics |
+| `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/command_velocity.csv` | `/mavros/setpoint_raw/local` velocity commands |
+| `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/images/camera/` | Camera snapshots as JPG from the configured camera topic |
+| `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/images/annotated/` | `/target_cv/annotated` snapshots as JPG |
+| `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/images/mask/` | `/target_cv/mask` snapshots as PNG |
+
+The package-drop and package-delivery mission launches start this node by default.
+Disable it with `log_session:=false`. Logger settings come from the
+`session_logger` block in the selected mission params YAML.
+
+---
+
 ## Library Module
 
 ### `sdf_objects.py`
@@ -157,12 +177,14 @@ Registered in `setup.py`:
 ```
 simple_takeoff_service = drone_utils.simple_takeoff_service:main
 gimbal_point_service   = drone_utils.gimble_point_service:main
+session_logger         = drone_utils.session_logger:main
 ```
 
 Run individually:
 ```bash
 ros2 run drone_utils simple_takeoff_service
 ros2 run drone_utils gimbal_point_service
+ros2 run drone_utils session_logger
 ```
 
 Or launch via a mission launch file that loads the matching YAML config (e.g. `mission_params.yaml`).

@@ -1,10 +1,9 @@
 # drone_target_cv
 
-ROS2 Python package for the camera compression and target-tracking nodes used by
+ROS2 Python package for the USB camera and target-tracking nodes used by
 `drone_mission_demo`.
 
 Current nodes:
-- `compressed_grabber`
 - `target_cv`
 - `usb_grabber`
 
@@ -49,7 +48,9 @@ ros2 launch drone_target_cv usb_grabber.launch.py
 
 If a consumer needs raw images:
 
-Set `publish_raw: true` in the selected params YAML.
+```bash
+ros2 launch drone_target_cv usb_grabber.launch.py publish_raw:=true
+```
 
 For more consistent target colors, the USB grabber locks white balance through
 OpenCV by default for the global-shutter camera profile while leaving exposure

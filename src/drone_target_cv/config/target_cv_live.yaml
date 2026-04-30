@@ -1,8 +1,0 @@
-target_cv:
-  ros__parameters:
-    image_topic: "camera/image/compressed"
-    compressed_input: true
-    debug_view: true
-    start_enabled: true
-    sim_hsv: false
-    min_circularity: 0.4  # 1.0 is circle-like; reject long/irregular red blobs below this.

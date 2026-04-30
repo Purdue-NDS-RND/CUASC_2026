@@ -79,6 +79,11 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="config/sequences/package_drop_live.yaml",
                 description="Mission sequence YAML relative to the drone_mission_demo package",
             ),
+            DeclareLaunchArgument(
+                "log_session",
+                default_value="true",
+                description="Start the mission session logger",
+            ),
             # Options: rolling, global. device_path below overrides this selection when set.
             DeclareLaunchArgument(
                 "camera_type",

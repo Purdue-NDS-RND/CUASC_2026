@@ -49,13 +49,12 @@ ros2 launch drone_target_cv usb_grabber.launch.py
 If a consumer needs raw images:
 
 ```bash
-ros2 launch drone_target_cv usb_grabber.launch.py \
-  params:=config/usb_grabber_live.yaml
+ros2 launch drone_target_cv usb_grabber.launch.py publish_raw:=true
 ```
 
-Then set `publish_raw: true` in the selected params YAML. For more consistent
-target colors, the USB grabber locks white balance through OpenCV by default for
-the global-shutter camera profile while leaving exposure automatic:
+For more consistent target colors, the USB grabber locks white balance through
+OpenCV by default for the global-shutter camera profile while leaving exposure
+automatic:
 
 ```yaml
 usb_grabber:
@@ -63,6 +62,23 @@ usb_grabber:
     lock_white_balance: true
     manual_white_balance: 4500
 ```
+
+Image controls are also YAML-driven. Negative values leave that control at the
+camera's auto/default setting:
+
+```yaml
+usb_grabber:
+  ros__parameters:
+    brightness: -1
+    contrast: -1
+    saturation: -1
+    gain: -1
+    auto_exposure: -1
+    exposure_time_absolute: -1
+```
+
+For manual exposure, set `exposure_time_absolute` to a non-negative value. If
+`auto_exposure` is not set, the node requests manual exposure automatically.
 
 The camera driver defines the valid ranges, so check them on the target machine:
 

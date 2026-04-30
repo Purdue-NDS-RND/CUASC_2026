@@ -26,6 +26,7 @@ target_cv:
     start_enabled: false
     compressed_input: false
     sim_hsv: true
+    min_circularity: 0.4  # 1.0 is circle-like; reject long/irregular red blobs below this.
 
 session_logger:
   ros__parameters:

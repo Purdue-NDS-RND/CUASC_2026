@@ -52,6 +52,35 @@ CAMERA_CONTROL_PROFILES = {
 }
 
 
+OPTIONAL_V4L2_CONTROLS = (
+    "brightness",
+    "contrast",
+    "saturation",
+    "hue",
+    "gamma",
+    "gain",
+    "sharpness",
+    "backlight_compensation",
+    "power_line_frequency",
+    "exposure_dynamic_framerate",
+)
+
+
+OPTIONAL_OPENCV_PROPERTIES = {}
+for _control_name, _property_name in (
+    ("brightness", "CAP_PROP_BRIGHTNESS"),
+    ("contrast", "CAP_PROP_CONTRAST"),
+    ("saturation", "CAP_PROP_SATURATION"),
+    ("hue", "CAP_PROP_HUE"),
+    ("gain", "CAP_PROP_GAIN"),
+    ("gamma", "CAP_PROP_GAMMA"),
+    ("sharpness", "CAP_PROP_SHARPNESS"),
+):
+    _property_id = getattr(cv2, _property_name, None)
+    if _property_id is not None:
+        OPTIONAL_OPENCV_PROPERTIES[_control_name] = _property_id
+
+
 class USBGrabber(Node):
     def __init__(self) -> None:
         super().__init__("usb_grabber")
@@ -88,6 +117,10 @@ class USBGrabber(Node):
             "reset_v4l2_controls",
             control_profile["reset_v4l2_controls"],
         )
+        for control_name in OPTIONAL_V4L2_CONTROLS:
+            self.declare_parameter(control_name, -1)
+        self.declare_parameter("auto_exposure", -1)
+        self.declare_parameter("exposure_time_absolute", -1)
 
         self._device_path = self._resolve_device_path(
             str(self.get_parameter("device_path").value)
@@ -112,6 +145,7 @@ class USBGrabber(Node):
             self.get_parameter("reset_v4l2_controls").value
         )
         self._default_v4l2_controls = control_profile["default_v4l2_controls"]
+        self._configured_v4l2_controls = self._read_configured_v4l2_controls()
 
         self._camera_info_msg = self._minimal_camera_info()
 
@@ -183,7 +217,8 @@ class USBGrabber(Node):
             f"   Raw pub    : {self._publish_raw}\n"
             f"   Compressed : {self._publish_compressed} "
             f"(jpeg q={self._compressed_quality})\n"
-            f"   White Bal. : {'locked' if self._lock_white_balance else 'auto/default'}\n"
+            f"   White Bal. : {self._white_balance_summary()}\n"
+            f"   Controls   : {self._configured_controls_summary()}\n"
             "   CameraInfo : minimal only (no intrinsics)"
         )
 
@@ -225,7 +260,11 @@ class USBGrabber(Node):
         return camera
 
     def _apply_v4l2_camera_controls(self) -> None:
-        if not self._reset_v4l2_controls and not self._lock_white_balance:
+        if (
+            not self._reset_v4l2_controls
+            and not self._lock_white_balance
+            and not self._configured_v4l2_controls
+        ):
             return
 
         v4l2_ctl = shutil.which("v4l2-ctl")
@@ -242,13 +281,22 @@ class USBGrabber(Node):
                 "default image controls",
             )
 
+        self._set_v4l2_controls(
+            v4l2_ctl,
+            self._configured_v4l2_controls,
+            "configured image controls",
+        )
+
         if not self._lock_white_balance:
             return
 
-        controls = {"white_balance_automatic": 0}
-        if self._manual_white_balance >= 0:
-            controls["white_balance_temperature"] = self._manual_white_balance
-
+        if self._manual_white_balance < 0:
+            controls = {"white_balance_automatic": 1}
+        else:
+            controls = {
+                "white_balance_automatic": 0,
+                "white_balance_temperature": self._manual_white_balance,
+            }
         self._set_v4l2_controls(v4l2_ctl, controls, "white balance controls")
 
     def _set_v4l2_controls(
@@ -301,17 +349,21 @@ class USBGrabber(Node):
         )
 
     def _apply_camera_controls(self) -> None:
-        if not self._lock_white_balance:
-            return
-
         applied_controls: list[str] = []
-        self._set_camera_property(
-            cv2.CAP_PROP_AUTO_WB,
-            0.0,
-            "manual white balance mode",
-            applied_controls,
-        )
-        if self._manual_white_balance >= 0:
+        if self._lock_white_balance and self._manual_white_balance < 0:
+            self._set_camera_property(
+                cv2.CAP_PROP_AUTO_WB,
+                1.0,
+                "auto white balance mode",
+                applied_controls,
+            )
+        elif self._lock_white_balance:
+            self._set_camera_property(
+                cv2.CAP_PROP_AUTO_WB,
+                0.0,
+                "manual white balance mode",
+                applied_controls,
+            )
             self._set_camera_property(
                 cv2.CAP_PROP_WB_TEMPERATURE,
                 float(self._manual_white_balance),
@@ -319,11 +371,23 @@ class USBGrabber(Node):
                 applied_controls,
             )
 
+        for control_name, property_id in OPTIONAL_OPENCV_PROPERTIES.items():
+            control_value = self._configured_v4l2_controls.get(control_name)
+            if control_value is None:
+                continue
+            self._set_camera_property(
+                property_id,
+                float(control_value),
+                control_name,
+                applied_controls,
+                warn_on_failure=False,
+            )
+
         if applied_controls:
             self.get_logger().info(
                 "Applied OpenCV camera controls: " + ", ".join(applied_controls)
             )
-        else:
+        elif self._lock_white_balance or self._configured_v4l2_controls:
             self.get_logger().warn("No OpenCV camera controls were applied.")
 
     def _set_camera_property(
@@ -343,6 +407,38 @@ class USBGrabber(Node):
             self.get_logger().warn(
                 f"OpenCV did not accept camera control '{label}'={value:g}."
             )
+
+    def _white_balance_summary(self) -> str:
+        if not self._lock_white_balance or self._manual_white_balance < 0:
+            return "auto/default"
+        return f"locked ({self._manual_white_balance}K)"
+
+    def _read_configured_v4l2_controls(self) -> dict[str, int]:
+        controls: dict[str, int] = {}
+        for control_name in OPTIONAL_V4L2_CONTROLS:
+            control_value = int(self.get_parameter(control_name).value)
+            if control_value >= 0:
+                controls[control_name] = control_value
+
+        auto_exposure = int(self.get_parameter("auto_exposure").value)
+        exposure_time_absolute = int(
+            self.get_parameter("exposure_time_absolute").value
+        )
+        if exposure_time_absolute >= 0:
+            controls["auto_exposure"] = auto_exposure if auto_exposure >= 0 else 1
+            controls["exposure_time_absolute"] = exposure_time_absolute
+        elif auto_exposure >= 0:
+            controls["auto_exposure"] = auto_exposure
+
+        return controls
+
+    def _configured_controls_summary(self) -> str:
+        if not self._configured_v4l2_controls:
+            return "auto/default"
+        return ", ".join(
+            f"{control_name}={control_value}"
+            for control_name, control_value in self._configured_v4l2_controls.items()
+        )
 
     def _capture_loop(self) -> None:
         while not self._stop_event.is_set():

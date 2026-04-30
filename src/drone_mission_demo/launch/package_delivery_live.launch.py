@@ -79,10 +79,86 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="config/sequences/package_delivery_live.yaml",
                 description="Mission sequence YAML relative to the drone_mission_demo package",
             ),
+            # Options: rolling, global. device_path below overrides this selection when set.
             DeclareLaunchArgument(
-                "log_session",
+                "camera_type",
+                default_value="global",
+                description="Camera type preset: rolling or global",
+            ),
+            DeclareLaunchArgument(
+                "device_path",
+                default_value="",
+                description="Optional stable Linux camera path override like /dev/v4l/by-id/...",
+            ),
+            DeclareLaunchArgument(
+                "image_width",
+                default_value="640",
+                description="Requested USB camera capture width in pixels",
+            ),
+            DeclareLaunchArgument(
+                "image_height",
+                default_value="480",
+                description="Requested USB camera capture height in pixels",
+            ),
+            DeclareLaunchArgument(
+                "publish_width",
+                default_value="640",
+                description="Published image width in pixels after resize",
+            ),
+            DeclareLaunchArgument(
+                "publish_height",
+                default_value="480",
+                description="Published image height in pixels after resize",
+            ),
+            DeclareLaunchArgument(
+                "fps",
+                default_value="60.0",
+                description="Requested USB camera frame rate",
+            ),
+            DeclareLaunchArgument(
+                "image_publishing_rate",
+                default_value="30.0",
+                description="ROS image publish rate in Hz",
+            ),
+            DeclareLaunchArgument(
+                "frame_id",
+                default_value="camera_link",
+                description="Frame id for published Image and CameraInfo messages",
+            ),
+            DeclareLaunchArgument(
+                "publish_raw",
+                default_value="false",
+                description="Publish raw sensor_msgs/Image on /camera/image",
+            ),
+            DeclareLaunchArgument(
+                "publish_compressed",
                 default_value="true",
-                description="Start the mission session logger",
+                description="Publish JPEG-compressed frames on /camera/image/compressed",
+            ),
+            DeclareLaunchArgument(
+                "compressed_quality",
+                default_value="20",
+                description="JPEG quality used for /camera/image/compressed",
+            ),
+            DeclareLaunchArgument(
+                "reset_v4l2_controls",
+                default_value="true",
+                description="Reset global-camera V4L2 image controls to their defaults before white balance",
+            ),
+            DeclareLaunchArgument(
+                "lock_white_balance",
+                default_value="true",
+                description="Disable automatic white balance and use manual_white_balance",
+            ),
+            DeclareLaunchArgument(
+                "manual_white_balance",
+                default_value="4500",
+                description="Manual white balance temperature for V4L2/OpenCV controls",
+            ),
+            DeclareLaunchArgument(
+                "sim_hsv",
+                default_value="false",
+                description="Use sim red HSV thresholds when true; live/outdoor thresholds when false",
             ),
             usb_grabber_node,
             takeoff_service_node,

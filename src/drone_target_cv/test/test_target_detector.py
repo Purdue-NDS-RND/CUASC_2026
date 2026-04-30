@@ -12,7 +12,10 @@ import numpy as np
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE_ROOT))
 
-from drone_target_cv.target_detector import RedTargetDetector  # noqa: E402
+from drone_target_cv.target_detector import (  # noqa: E402
+    RedTargetDetector,
+    RedTargetDetectorConfig,
+)
 
 
 ASPHALT = (82, 82, 82)
@@ -148,3 +151,15 @@ def test_ignores_small_red_distractor_when_target_is_present() -> None:
 
     assert result.accepted
     _assert_center_near(result.center, expected_center, 3.0)
+
+
+def test_rejects_low_circularity_red_blob() -> None:
+    frame = _blank_frame()
+    cv2.rectangle(frame, (80, 228), (560, 252), RED, -1)
+    detector = RedTargetDetector(RedTargetDetectorConfig(min_circularity=0.4))
+
+    result = detector.detect(frame)
+
+    assert not result.accepted
+    assert result.circularity < 0.4
+    assert "circularity" in result.reject_reason

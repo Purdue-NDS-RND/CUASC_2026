@@ -1,0 +1,7 @@
+target_cv:
+  ros__parameters:
+    image_topic: "camera/image/compressed"
+    compressed_input: true
+    debug_view: true
+    start_enabled: true
+    sim_hsv: false

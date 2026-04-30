@@ -47,6 +47,7 @@ Defined in `drone_mission_demo/missions/`:
 `launch/package_drop_demo.launch.py` starts the shared vision-guided delivery stack:
 - `simple_takeoff_service` from `drone_utils`
 - `target_cv` from `drone_target_cv`
+- `session_logger` from `drone_utils`
 - `mission_executor` from `drone_mission_core`
 
 `launch/package_delivery_demo.launch.py` starts the same stack but defaults to the package-delivery sequence.
@@ -67,7 +68,7 @@ This package keeps mission config organized under `config/`:
 |---|---|
 | `config/params/mission_params.yaml` | ROS parameters for the takeoff service and mission executor |
 | `config/params/live_target_mission.yaml` | Shared ROS parameters for the live USB-camera vision stack |
-| `config/params/package_drop_params.yaml` | ROS parameters for the package-drop launch stack |
+| `config/params/sim_target_mission.yaml` | Shared ROS parameters for the sim vision stack |
 | `config/sequences/package_delivery_live.yaml` | Live-flight package-delivery template sequence |
 | `config/patterns/square.yaml` | Reusable square waypoint pattern |
 | `config/patterns/zig_zag.yaml` | Reusable zig-zag waypoint pattern |
@@ -208,7 +209,7 @@ Run the live package-delivery stack:
 ros2 launch drone_mission_demo package_delivery_live.launch.py
 ```
 
-The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. Live launches default to `camera_type:=global`, `640x480` capture/publish, `fps:=60.0`, and `image_publishing_rate:=30.0`. Use `camera_type:=rolling` to switch back to the default 12MP camera. Demo launches default `sim_hsv:=true`; live launches default `sim_hsv:=false` for the stricter outdoor red threshold. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
+The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. Live camera/CV/logger defaults live in `config/params/live_target_mission.yaml`: `camera_type: global`, `640x480` capture/publish, `fps: 60.0`, `image_publishing_rate: 30.0`, and `sim_hsv: false`. Demo launches use `config/params/sim_target_mission.yaml`, including `sim_hsv: true` and the demo logger settings. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
 
 ## Sequence Example
 

@@ -48,7 +48,7 @@ def test_stream_check_script_matches_readiness_contract():
 def test_demo_params_require_extended_state():
     for path in (
         REPO_ROOT / "src/drone_mission_demo/config/params/mission_params.yaml",
-        REPO_ROOT / "src/drone_mission_demo/config/params/package_drop_params.yaml",
+        REPO_ROOT / "src/drone_mission_demo/config/params/sim_target_mission.yaml",
     ):
         text = path.read_text(encoding="utf-8")
         assert '"/mavros/extended_state"' in text

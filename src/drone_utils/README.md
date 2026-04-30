@@ -139,14 +139,13 @@ controller commands plus image snapshots.
 |---|---|
 | `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/metadata.json` | Session metadata and subscribed topics |
 | `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/command_velocity.csv` | `/mavros/setpoint_raw/local` velocity commands |
-| `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/images/camera/` | `/camera/image/compressed` snapshots as JPG |
+| `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/images/camera/` | Camera snapshots as JPG from the configured camera topic |
 | `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/images/annotated/` | `/target_cv/annotated` snapshots as JPG |
 | `~/cuasc_logs/mission_YYYYmmdd_HHMMSS/images/mask/` | `/target_cv/mask` snapshots as PNG |
 
-The live package-drop and package-delivery launches start this node by default.
-Disable it with `log_session:=false`, or change the folder/interval with
-`log_output_base:=...`, `log_session_name:=...`, and
-`log_image_interval_s:=...`.
+The package-drop and package-delivery mission launches start this node by default.
+Disable it with `log_session:=false`. Logger settings come from the
+`session_logger` block in the selected mission params YAML.
 
 ---
 

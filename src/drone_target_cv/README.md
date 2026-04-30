@@ -50,12 +50,13 @@ ros2 launch drone_target_cv usb_grabber.launch.py
 If a consumer needs raw images:
 
 ```bash
-ros2 launch drone_target_cv usb_grabber.launch.py publish_raw:=true
+ros2 launch drone_target_cv usb_grabber.launch.py \
+  params:=config/usb_grabber_live.yaml
 ```
 
-For more consistent target colors, the USB grabber locks white balance through
-OpenCV by default for the global-shutter camera profile while leaving exposure
-automatic:
+Then set `publish_raw: true` in the selected params YAML. For more consistent
+target colors, the USB grabber locks white balance through OpenCV by default for
+the global-shutter camera profile while leaving exposure automatic:
 
 ```yaml
 usb_grabber:
@@ -109,8 +110,11 @@ global  -> /dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9782_USB_Ca
 Global-shutter camera example:
 
 ```bash
-ros2 launch drone_target_cv usb_grabber.launch.py camera_type:=global
+ros2 launch drone_target_cv usb_grabber.launch.py
 ```
+
+The default standalone params file is `config/usb_grabber_live.yaml`; edit
+`camera_type` there to switch between `global` and `rolling`.
 
 Default rolling-shutter device path:
 
@@ -120,7 +124,5 @@ Default rolling-shutter device path:
 
 Override example:
 
-```bash
-ros2 launch drone_target_cv usb_grabber.launch.py \
-  device_path:=/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_12MP_SN0001-video-index0
-```
+Set `device_path` in the selected params YAML to a stable `/dev/v4l/by-id/...`
+path. A non-empty `device_path` overrides `camera_type`.

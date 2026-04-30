@@ -44,6 +44,7 @@ class MissionSessionLogger(Node):
         self.declare_parameter("image_interval_s", 1.0)
         self.declare_parameter("command_topic", "/mavros/setpoint_raw/local")
         self.declare_parameter("camera_topic", "/camera/image/compressed")
+        self.declare_parameter("camera_compressed_input", True)
         self.declare_parameter("annotated_topic", "/target_cv/annotated")
         self.declare_parameter("mask_topic", "/target_cv/mask")
         self.declare_parameter("debug_topic_warn_after_s", 5.0)
@@ -58,6 +59,9 @@ class MissionSessionLogger(Node):
         )
         self._command_topic = str(self.get_parameter("command_topic").value)
         self._camera_topic = str(self.get_parameter("camera_topic").value)
+        self._camera_compressed_input = bool(
+            self.get_parameter("camera_compressed_input").value
+        )
         self._annotated_topic = str(self.get_parameter("annotated_topic").value)
         self._mask_topic = str(self.get_parameter("mask_topic").value)
 
@@ -150,6 +154,7 @@ class MissionSessionLogger(Node):
                 "annotated": self._annotated_topic,
                 "mask": self._mask_topic,
             },
+            "camera_compressed_input": self._camera_compressed_input,
             "files": {
                 "command_velocity_csv": str(
                     self._session_dir / "command_velocity.csv"
@@ -172,8 +177,9 @@ class MissionSessionLogger(Node):
             self._on_command_velocity,
             10,
         )
+        camera_msg_type = CompressedImage if self._camera_compressed_input else Image
         self.create_subscription(
-            CompressedImage,
+            camera_msg_type,
             self._camera_topic,
             self._store_camera_image,
             qos_profile_sensor_data,
@@ -202,7 +208,7 @@ class MissionSessionLogger(Node):
         self._csv_writer.writerow(row)
         self._csv_file.flush()
 
-    def _store_camera_image(self, msg: CompressedImage) -> None:
+    def _store_camera_image(self, msg: Image | CompressedImage) -> None:
         self._store_image("camera", msg)
 
     def _store_annotated_image(self, msg: Image) -> None:
@@ -229,10 +235,15 @@ class MissionSessionLogger(Node):
             return
 
         saved_any = False
+        camera_converter = (
+            self._compressed_image_to_bgr
+            if self._camera_compressed_input
+            else self._image_to_cv_array
+        )
         saved_any |= self._save_latest_image(
             stream_name="camera",
             extension="jpg",
-            converter=self._compressed_image_to_bgr,
+            converter=camera_converter,
         )
         saved_any |= self._save_latest_image(
             stream_name="annotated",

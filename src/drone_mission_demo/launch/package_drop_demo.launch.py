@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -32,12 +33,7 @@ def generate_launch_description() -> LaunchDescription:
         executable="target_cv",
         name="target_cv",
         output="screen",
-        parameters=[
-            params,
-            {
-                "sim_hsv": LaunchConfiguration("sim_hsv"),
-            },
-        ],
+        parameters=[params],
     )
 
     executor_node = Node(
@@ -54,6 +50,15 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
+    session_logger_node = Node(
+        package="drone_utils",
+        executable="session_logger",
+        name="session_logger",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("log_session")),
+        parameters=[params],
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -67,12 +72,13 @@ def generate_launch_description() -> LaunchDescription:
                 description="Mission sequence YAML relative to the drone_mission_demo package",
             ),
             DeclareLaunchArgument(
-                "sim_hsv",
+                "log_session",
                 default_value="true",
-                description="Use sim red HSV thresholds when true; live/outdoor thresholds when false",
+                description="Start the mission session logger",
             ),
             takeoff_service_node,
             target_cv_node,
             executor_node,
+            session_logger_node,
         ]
     )

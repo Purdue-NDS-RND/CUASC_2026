@@ -183,7 +183,7 @@ class USBGrabber(Node):
             f"   Raw pub    : {self._publish_raw}\n"
             f"   Compressed : {self._publish_compressed} "
             f"(jpeg q={self._compressed_quality})\n"
-            f"   White Bal. : {'locked' if self._lock_white_balance else 'auto/default'}\n"
+            f"   White Bal. : {self._white_balance_summary()}\n"
             "   CameraInfo : minimal only (no intrinsics)"
         )
 
@@ -343,6 +343,13 @@ class USBGrabber(Node):
             self.get_logger().warn(
                 f"OpenCV did not accept camera control '{label}'={value:g}."
             )
+
+    def _white_balance_summary(self) -> str:
+        if not self._lock_white_balance:
+            return "auto/default"
+        if self._manual_white_balance < 0:
+            return "locked"
+        return f"locked ({self._manual_white_balance}K)"
 
     def _capture_loop(self) -> None:
         while not self._stop_event.is_set():

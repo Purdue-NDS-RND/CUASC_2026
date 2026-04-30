@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -78,6 +79,21 @@ def generate_launch_description() -> LaunchDescription:
                 "sequence_file": sequence,
                 "mission_modules": ["drone_mission_demo.missions"],
             },
+        ],
+    )
+
+    session_logger_node = Node(
+        package="drone_utils",
+        executable="session_logger",
+        name="session_logger",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("log_session")),
+        parameters=[
+            {
+                "output_base": LaunchConfiguration("log_output_base"),
+                "session_name": LaunchConfiguration("log_session_name"),
+                "image_interval_s": LaunchConfiguration("log_image_interval_s"),
+            }
         ],
     )
 
@@ -174,9 +190,30 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="false",
                 description="Use sim red HSV thresholds when true; live/outdoor thresholds when false",
             ),
+            DeclareLaunchArgument(
+                "log_session",
+                default_value="true",
+                description="Start the mission session logger",
+            ),
+            DeclareLaunchArgument(
+                "log_output_base",
+                default_value="~/cuasc_logs",
+                description="Base directory for timestamped mission log folders",
+            ),
+            DeclareLaunchArgument(
+                "log_session_name",
+                default_value="mission",
+                description="Prefix for the timestamped mission log folder",
+            ),
+            DeclareLaunchArgument(
+                "log_image_interval_s",
+                default_value="1.0",
+                description="Seconds between saved image snapshots",
+            ),
             usb_grabber_node,
             takeoff_service_node,
             target_cv_node,
             executor_node,
+            session_logger_node,
         ]
     )

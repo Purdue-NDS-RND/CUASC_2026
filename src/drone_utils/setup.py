@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'simple_takeoff_service = drone_utils.simple_takeoff_service:main',
             'gimbal_point_service = drone_utils.gimble_point_service:main',
+            'session_logger = drone_utils.session_logger:main',
         ],
     },
 )

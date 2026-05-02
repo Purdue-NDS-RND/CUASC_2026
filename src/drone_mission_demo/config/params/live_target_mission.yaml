@@ -19,32 +19,16 @@ mission_executor:
     loop_rate_hz: 20.0
     abort_rtl_mode: "RTL"
 
-usb_grabber:
+mipi_grabber:
   ros__parameters:
-    camera_type: "rolling"
-    device_path: ""
-    image_width: 640
-    image_height: 480
-    publish_width: 640
-    publish_height: 480
-    fps: 60.0
+    image_width: 1280
+    image_height: 720
+    fps: 60
+    shutter_speed: 1000
+    wb_mode: 6
     image_publishing_rate: 30.0
-    lock_white_balance: false
-    manual_white_balance: -1
-    # Negative values leave the camera auto/default for that control.
-    # Exact ranges vary by camera; run: v4l2-ctl -d <camera> --list-ctrls
-    brightness: -1               # Typical 0-255 or -64-64; higher brightens image, too high washes red pink/white.
-    contrast: -1                 # Typical 0-64 or 0-255; higher separates red/white, too high crushes dark detail.
-    saturation: -1               # Typical 0-128 or 0-255; higher makes red vivid, low makes red pale/pink/gray.
-    hue: -1                      # Typical -40-40 or -180-180; shifts all colors, avoid unless red hue is rotated.
-    gamma: -1                    # Typical 72-500; higher lifts midtones, too high makes red look faded.
-    gain: -1                     # Typical 0-100 or 0-255; higher brightens sensor signal, high adds noise/pink tint.
-    sharpness: -1                # Typical 0-6 or 0-255; higher sharpens edges, high adds halos/red speckles.
-    backlight_compensation: -1   # Typical 0-1 or 0-2; helps dark target on bright field, can over-brighten.
-    power_line_frequency: -1     # Typical 0=off, 1=50Hz, 2=60Hz; indoor flicker control, usually irrelevant outdoors.
-    exposure_dynamic_framerate: -1  # Typical 0-1; 1 may brighten by reducing actual FPS.
-    auto_exposure: -1            # Typical 1=manual, 3=auto on UVC; -1 leaves auto/default.
-    exposure_time_absolute: -1   # Typical 1-10000; higher is brighter/longer exposure, high blurs and washes red.
+    camera_info_file: "mipi_info.yaml"
+    compressed_quality: 20
 
 target_cv:
   ros__parameters:

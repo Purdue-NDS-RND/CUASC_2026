@@ -20,10 +20,10 @@ def generate_launch_description() -> LaunchDescription:
         ]
     )
 
-    usb_grabber_node = Node(
+    mipi_grabber_node = Node(
         package="drone_target_cv",
-        executable="usb_grabber",
-        name="usb_grabber",
+        executable="mipi_grabber",
+        name="mipi_grabber",
         output="screen",
         parameters=[params],
     )
@@ -84,7 +84,7 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="true",
                 description="Start the mission session logger",
             ),
-            usb_grabber_node,
+            mipi_grabber_node,
             takeoff_service_node,
             target_cv_node,
             executor_node,

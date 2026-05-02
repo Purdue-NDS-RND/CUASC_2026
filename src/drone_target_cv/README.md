@@ -6,6 +6,7 @@ ROS2 Python package for the USB camera and target-tracking nodes used by
 Current nodes:
 - `target_cv`
 - `usb_grabber`
+- `mipi_grabber`
 
 These were split from `vision_pipeline` so mission-demo launch files can depend
 on a narrower CV package while the older vision stack remains available during
@@ -128,7 +129,7 @@ Global-shutter camera example:
 ros2 launch drone_target_cv usb_grabber.launch.py
 ```
 
-The default standalone params file is `config/usb_grabber_live.yaml`; edit
+The legacy standalone params file is `config/old_usb_grabber_live.yaml`; edit
 `camera_type` there to switch between `global` and `rolling`.
 
 Default rolling-shutter device path:

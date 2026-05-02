@@ -53,7 +53,7 @@ Defined in `drone_mission_demo/missions/`:
 `launch/package_delivery_demo.launch.py` starts the same stack but defaults to the package-delivery sequence.
 
 `launch/package_drop_live.launch.py` starts the live-flight version of that stack:
-- `usb_grabber` from `drone_target_cv`
+- `mipi_grabber` from `drone_target_cv`
 - `simple_takeoff_service` from `drone_utils`
 - `target_cv` from `drone_target_cv`
 - `mission_executor` from `drone_mission_core`
@@ -209,7 +209,7 @@ Run the live package-delivery stack:
 ros2 launch drone_mission_demo package_delivery_live.launch.py
 ```
 
-The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. Live camera/CV/logger defaults live in `config/params/live_target_mission.yaml`: `camera_type: rolling`, `640x480` capture/publish, `fps: 60.0`, `image_publishing_rate: 30.0`, auto/default image controls, unlocked white balance, and `sim_hsv: false`. Demo launches use `config/params/sim_target_mission.yaml`, including `sim_hsv: true` and the demo logger settings. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
+The live launch files boot `mipi_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. Live camera/CV/logger defaults live in `config/params/live_target_mission.yaml`: `1280x720`, `fps: 60`, `image_publishing_rate: 30.0`, `camera_info_file: mipi_info.yaml`, and `sim_hsv: false`. The previous USB live params are preserved in `config/params/old_live_target_mission.yaml`, with prior live sequence copies in `config/sequences/old_package_drop_live.yaml` and `config/sequences/old_package_delivery_live.yaml`. Demo launches use `config/params/sim_target_mission.yaml`, including `sim_hsv: true` and the demo logger settings. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
 
 Use the workspace helper to fill both live sequence coordinate templates:
 

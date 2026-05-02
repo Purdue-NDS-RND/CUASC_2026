@@ -108,6 +108,8 @@ class PackageDropMission(RedBullseyeMissionBase):
         if context.global_gps is None or context.local_pose is None:
             return MissionStatus.WAITING
 
+        context.logger.info(f"[{self.name}] En route to GPS delivery zone at " f"({self._target_latitude:.7f}, {self._target_longitude:.7f})")
+
         ground_distance = haversine_distance(
             context.global_gps.latitude,
             context.global_gps.longitude,

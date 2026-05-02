@@ -67,7 +67,7 @@ This package keeps mission config organized under `config/`:
 | Path | Purpose |
 |---|---|
 | `config/params/mission_params.yaml` | ROS parameters for the takeoff service and mission executor |
-| `config/params/live_target_mission.yaml` | Shared ROS parameters for the live USB-camera vision stack |
+| `config/params/live_target_mission.yaml` | Shared ROS parameters for the live MIPI-camera vision stack |
 | `config/params/sim_target_mission.yaml` | Shared ROS parameters for the sim vision stack |
 | `config/sequences/package_delivery_live.yaml` | Live-flight package-delivery template sequence |
 | `config/patterns/square.yaml` | Reusable square waypoint pattern |

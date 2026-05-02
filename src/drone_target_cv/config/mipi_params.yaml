@@ -1,0 +1,19 @@
+mipi_grabber:
+    ros__parameters:
+        image_width: 1280
+        image_height: 720
+        fps: 60
+        shutter_speed: 1000
+        wb_mode: 6
+        image_publishing_rate: 30.0
+
+mission_logger:
+    ros__parameters:
+        mount_x: 0.2667
+        mount_y: 0.03
+        mount_z: 0.40005
+        mount_roll: 0.0
+        mount_pitch: 0.0
+        mount_yaw: 180.0
+        ground_altitude_m: 0.0
+        show_debug_window: false

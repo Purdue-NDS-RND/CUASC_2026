@@ -3,7 +3,6 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-
 package_name = "drone_target_cv"
 
 
@@ -39,6 +38,7 @@ setup(
             "target_cv = drone_target_cv.target_cv:main",
             "usb_grabber = drone_target_cv.usb_grabber:main",
             "debug_viewer = drone_target_cv.debug_viewer:main",
+            "mipi_grabber = drone_target_cv.mipi_grabber:main",
         ],
     },
 )

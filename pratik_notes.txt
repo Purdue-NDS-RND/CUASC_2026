@@ -1,0 +1,24 @@
+Step 1
+cd ~/CUASC_2026
+colcon build --packages-select drone_target_cv
+source install/setup.bash
+
+Step 2
+ros2 launch drone_target_cv mipi_grabber.launch.py
+
+Step 3(New terminal)
+
+source install/setup.bash
+ros2 launch drone_target_cv target_cv_live.launch.py
+
+
+Your laptop
+Make sure ID is aligned
+export ROS_DOMAIN_ID=0  # Or whatever ID your team uses
+
+ros2 run drone_target_cv debug_viewer --ros-args -p compressed_input:=true
+
+
+Debugging checks
+ros2 topic hz /camera/image/compressed
+ros2 topic hz /camera/image

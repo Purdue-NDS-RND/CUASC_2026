@@ -106,32 +106,36 @@ class MIPIGrabber(Node):
         scale_y = self._height / orig_h
 
         K = calib_data["camera_matrix"]["data"]
+
+        # Explicitly cast every element to float() to satisfy ROS 2 type bindings
         msg.k = [
-            K[0] * scale_x,
-            K[1],
-            K[2] * scale_x,
-            K[3],
-            K[4] * scale_y,
-            K[5] * scale_y,
-            K[6],
-            K[7],
-            K[8],
+            float(K[0] * scale_x),
+            float(K[1]),
+            float(K[2] * scale_x),
+            float(K[3]),
+            float(K[4] * scale_y),
+            float(K[5] * scale_y),
+            float(K[6]),
+            float(K[7]),
+            float(K[8]),
         ]
-        msg.d = calib_data["distortion_coefficients"]["data"]
+
+        # Safely cast the distortion coefficients as well
+        msg.d = [float(x) for x in calib_data["distortion_coefficients"]["data"]]
         msg.distortion_model = calib_data.get("distortion_model", "plumb_bob")
 
         msg.p = [
-            msg.k[0],
-            msg.k[1],
-            msg.k[2],
+            float(msg.k[0]),
+            float(msg.k[1]),
+            float(msg.k[2]),
             0.0,
-            msg.k[3],
-            msg.k[4],
-            msg.k[5],
+            float(msg.k[3]),
+            float(msg.k[4]),
+            float(msg.k[5]),
             0.0,
-            msg.k[6],
-            msg.k[7],
-            msg.k[8],
+            float(msg.k[6]),
+            float(msg.k[7]),
+            float(msg.k[8]),
             0.0,
         ]
         return msg

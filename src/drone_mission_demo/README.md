@@ -209,7 +209,15 @@ Run the live package-delivery stack:
 ros2 launch drone_mission_demo package_delivery_live.launch.py
 ```
 
-The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. Live camera/CV/logger defaults live in `config/params/live_target_mission.yaml`: `camera_type: global`, `640x480` capture/publish, `fps: 60.0`, `image_publishing_rate: 30.0`, and `sim_hsv: false`. Demo launches use `config/params/sim_target_mission.yaml`, including `sim_hsv: true` and the demo logger settings. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
+The live launch files boot `usb_grabber` and feed `target_cv` from `/camera/image/compressed` with `debug_view: true`. Live camera/CV/logger defaults live in `config/params/live_target_mission.yaml`: `camera_type: rolling`, `640x480` capture/publish, `fps: 60.0`, `image_publishing_rate: 30.0`, auto/default image controls, unlocked white balance, and `sim_hsv: false`. Demo launches use `config/params/sim_target_mission.yaml`, including `sim_hsv: true` and the demo logger settings. `package_drop_live.yaml` uses real sprayer actuation with `fake_drop: false`; the demo sequences and `package_delivery_live.yaml` keep `fake_drop: true`. The live sequence coordinates are templates only: edit `target_latitude` and `target_longitude` before real flight.
+
+Use the workspace helper to fill both live sequence coordinate templates:
+
+```bash
+./set_live_mission_coords.py
+```
+
+Choose `manual` to type the target latitude and longitude, or choose `auto` to read the current FCU GPS fix from `/mavros/global_position/global`. By default the helper updates the source YAMLs only; pass `--also-install` if you need the already-built `install/share` copies updated before rebuilding.
 
 ## Sequence Example
 

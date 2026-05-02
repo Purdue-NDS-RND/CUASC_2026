@@ -9,7 +9,7 @@ usb_grabber:
     fps: 60.0
     image_publishing_rate: 30.0
     lock_white_balance: false
-    manual_white_balance: 4500
+    manual_white_balance: -1
     # Negative values leave the camera auto/default for that control.
     # Exact ranges vary by camera; run: v4l2-ctl -d <camera> --list-ctrls
     brightness: -1               # Typical 0-255 or -64-64; higher brightens image, too high washes red pink/white.

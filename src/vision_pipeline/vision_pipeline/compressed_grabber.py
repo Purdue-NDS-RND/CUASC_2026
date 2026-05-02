@@ -35,7 +35,7 @@ class CompressedGrabber(Node):
         self.declare_parameter("monitor_height", 540)
         self.declare_parameter("camera_info_file", "arducam_info.yaml")
         self.declare_parameter("enable_timelapse", True)
-        self.declare_parameter("save_dir", "/home/nds2/camera_captures_calibrated")
+        self.declare_parameter("save_dir", "/home/nds02/camera_captures_calibrated")
         self.declare_parameter("save_interval_sec", 1.0)
 
         self.width = self.get_parameter("image_width").value

@@ -24,7 +24,7 @@ from matplotlib.cm import get_cmap
 from matplotlib.colors import Normalize
 
 # ── Config ────────────────────────────────────────────────────────────────────
-FLIGHT_DIR = "/home/nds2/CUASC_Mission_Data/Flight_20260424_205344"
+FLIGHT_DIR = "/home/nds02/CUASC_Mission_Data/Flight_20260424_205344"
 
 CSV_PATH = os.path.join(FLIGHT_DIR, "mission_log.csv")
 OUTPUT_DIR = os.path.join(FLIGHT_DIR, "cluster_analysis")

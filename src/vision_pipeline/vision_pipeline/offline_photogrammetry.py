@@ -19,8 +19,8 @@ from ultralytics import YOLO
 # --- DIRECTORY ANCHORS ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_ROOT = os.path.dirname(SCRIPT_DIR)
-IMAGE_DIR = "/home/nds2/camera_captures_calibrated"
-OUTPUT_DIR = "/home/nds2/camera_captures_processed"
+IMAGE_DIR = "/home/nds02/camera_captures_calibrated"
+OUTPUT_DIR = "/home/nds02/camera_captures_processed"
 
 LOGS_CSV_DIR = os.path.join(SCRIPT_DIR, "logs_csv")
 

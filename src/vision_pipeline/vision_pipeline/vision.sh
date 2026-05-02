@@ -5,7 +5,7 @@ echo "🚀 Pre-flight sequence initiated..."
 source /opt/ros/humble/setup.bash
 
 # 2. Source your custom workspace
-source ~/dev/CUASC_2026/install/setup.bash
+source ~/CUASC_2026/install/setup.bash
 
 # 3. Activate the YOLO virtual environment
 source ~/dev/VTOL-Project/src/yolo_models/yolo_env/bin/activate

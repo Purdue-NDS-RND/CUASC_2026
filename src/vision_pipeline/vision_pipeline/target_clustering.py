@@ -31,7 +31,7 @@ import scipy.cluster.hierarchy as hcluster
 # ---------------------------------------------------------------------------
 # CONFIGURATION — update FLIGHT_DIR before each run
 # ---------------------------------------------------------------------------
-FLIGHT_DIR = "/home/nds2/CUASC_Mission_Data/Flight_20260424_205344 copy"
+FLIGHT_DIR = "/home/nds02/CUASC_Mission_Data/Flight_20260424_205344 copy"
 
 CSV_FULL = os.path.join(FLIGHT_DIR, "mission_log_full.csv")
 CSV_PRIME = os.path.join(FLIGHT_DIR, "mission_log_prime.csv")

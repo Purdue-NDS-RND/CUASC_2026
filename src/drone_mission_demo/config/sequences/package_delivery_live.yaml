@@ -13,15 +13,15 @@ mission_sequence:
         # Live-flight template: edit these coordinates before real flight.
         # The copied defaults below are inherited from the simulation demo and
         # are not safe operating coordinates on a real field.
-        target_latitude: 40.4287069               # GPS latitude of the delivery target.
-        target_longitude: -86.9290042              # GPS longitude of the delivery target.
+        target_latitude: 40.4278733               # GPS latitude of the delivery target.
+        target_longitude: -86.9283805              # GPS longitude of the delivery target.
         transit_altitude_m: 15.0                   # Cruise altitude used while flying to the target area.
-        landing_check_threshold_m: 6.0             # Altitude where delivery switches to touchdown logic.
-        touchdown_handoff_tolerance_m: 0.2         # Separate altitude tolerance for the final fixed-column handoff.
+        landing_check_threshold_m: 8.0             # Altitude where delivery switches to touchdown logic.
+        touchdown_handoff_tolerance_m: 3         # Separate altitude tolerance for the final fixed-column handoff.
         relaunch_altitude_m: 12.0                  # Altitude to climb back to after delivery is complete.
-        fake_drop: true                            # Simulate payload delivery without releasing the gripper actuator.
-        descent_rate_mps: 0.35                     # Normal descent speed while centered over the target.
-        final_descent_rate_mps: 0.10               # Slower descent speed near touchdown.
+        fake_drop: false                            # Simulate payload delivery without releasing the gripper actuator.
+        descent_rate_mps: 0.4                     # Normal descent speed while centered over the target.
+        final_descent_rate_mps: 0.25               # Slower descent speed near touchdown.
         delivery_dwell_s: 5.0                      # Time to remain on the ground before relaunch.
         guided_relaunch_rate_mps: 0.6              # Commanded climb rate for guided relaunch.
         guided_relaunch_max_climb_rate_mps: 2.5    # Maximum climb rate clamp during relaunch.
@@ -30,10 +30,10 @@ mission_sequence:
         camera_calibration_width_px: 3840.0        # Image width used when the camera intrinsics were calibrated.
         camera_calibration_height_px: 2160.0       # Image height used when the camera intrinsics were calibrated.
         camera_yaw_offset_deg: 0.0                 # Fixed yaw rotation between the camera and vehicle body.
-        centering_tolerance_m: 0.20                # Ground-error threshold considered centered enough to descend.
-        centering_deadband_m: 0.15                 # Small projected errors below this are treated as zero.
+        centering_tolerance_m: 0.8                # Ground-error threshold considered centered enough to descend.
+        centering_deadband_m: 0.5                 # Small projected errors below this are treated as zero.
         tracking_low_pass_alpha: 0.12              # Low-pass filter weight; higher values react faster but noisier.
-        centering_gain_mps_per_m: 0.25             # XY velocity gain applied to projected ground error.
+        centering_gain_mps_per_m: 0.15             # XY velocity gain applied to projected ground error.
         max_centering_speed_mps: 0.45              # Maximum commanded lateral tracking speed.
         arrival_radius_m: 3.0                      # Horizontal GPS radius used to declare arrival at the target area.
         arrival_alt_tolerance_m: 2.0               # Altitude tolerance used when checking target heights.
@@ -44,7 +44,7 @@ mission_sequence:
         recovery_alt_tolerance_m: 0.5              # Altitude tolerance for visual recovery climbs.
         min_projection_altitude_m: 0.75            # Minimum altitude where ground projection is considered valid.
         max_projection_distance_m: 25.0            # Reject projected detections farther than this from the drone.
-        centering_dwell_s: 1.0                     # Time to remain centered before committing to the next phase.
+        centering_dwell_s: 0.2                     # Time to remain centered before committing to the next phase.
         touchdown_dwell_s: 0.5                     # Debounce time for landed-state confirmation.
         target_timeout_s: 2.0                      # Detection freshness timeout before the target is considered lost.
 

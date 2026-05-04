@@ -4,7 +4,7 @@ mipi_grabber:
         image_height: 720
         fps: 60
         shutter_speed: 1000
-        wb_mode: 6
+        wb_mode: 3
         image_publishing_rate: 30.0
 
 mission_logger:

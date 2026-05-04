@@ -13,21 +13,21 @@ mission_sequence:
               # Live-flight template: edit these coordinates before real flight.
               # The copied defaults below are inherited from the simulation demo and
               # are not safe operating coordinates on a real field.
-              target_latitude: 40.4287069 # GPS latitude of the delivery target.
-              target_longitude: -86.9290042 # GPS longitude of the delivery target.
+              target_latitude: 40.4278733 # GPS latitude of the delivery target.
+              target_longitude: -86.9283805 # GPS longitude of the delivery target.
               transit_altitude_m: 15.0 # Cruise altitude used while flying to the target area.
-              drop_altitude_m: 4.0 # Target altitude for the package release.
+              drop_altitude_m: 6.0 # Target altitude for the package release.
               fake_drop: false # Simulate payload release without opening the sprayer actuator.
-              descent_rate_mps: 0.35 # Descent speed while centered over the target.
+              descent_rate_mps: 0.5 # Descent speed while centered over the target.
               camera_fx_px: 2334.99647 # Camera focal length in pixels along the x-axis.
               camera_fy_px: 2338.06625 # Camera focal length in pixels along the y-axis.
               camera_calibration_width_px: 3840.0 # Image width used when the camera intrinsics were calibrated.
               camera_calibration_height_px: 2160.0 # Image height used when the camera intrinsics were calibrated.
               camera_yaw_offset_deg: 0.0 # Fixed yaw rotation between the camera and vehicle body.
-              centering_tolerance_m: 0.22 # Ground-error threshold considered centered enough to descend.
-              centering_deadband_m: 0.15 # Small projected errors below this are treated as zero.
+              centering_tolerance_m: 0.50 # Ground-error threshold considered centered enough to descend.
+              centering_deadband_m: 0.40 # Small projected errors below this are treated as zero.
               tracking_low_pass_alpha: 0.12 # Low-pass filter weight; higher values react faster but noisier.
-              centering_gain_mps_per_m: 0.25 # XY velocity gain applied to projected ground error.
+              centering_gain_mps_per_m: 0.15 # XY velocity gain applied to projected ground error.
               max_centering_speed_mps: 0.45 # Maximum commanded lateral tracking speed.
               arrival_radius_m: 3.0 # Horizontal GPS radius used to declare arrival at the target area.
               arrival_alt_tolerance_m: 2.0 # Altitude tolerance used when checking target heights.
@@ -38,8 +38,8 @@ mission_sequence:
               recovery_alt_tolerance_m: 0.5 # Altitude tolerance for visual recovery climbs.
               min_projection_altitude_m: 0.75 # Minimum altitude where ground projection is considered valid.
               max_projection_distance_m: 25.0 # Reject projected detections farther than this from the drone.
-              centering_dwell_s: 1.0 # Time to remain centered before committing to the drop phase.
-              drop_altitude_tolerance_m: 0.5 # Altitude tolerance for the package release height.
+              centering_dwell_s: 0.5 # Time to remain centered before committing to the drop phase.
+              drop_altitude_tolerance_m: 3.0 # Altitude tolerance for the package release height.
               drop_column_handoff_altitude_m: 8.0 # Freeze GPS column below this height once centered.
               drop_hover_dwell_s: 8.0 # Hover time at drop altitude before releasing the payload.
               target_timeout_s: 2.0 # Detection freshness timeout before the target is considered lost.

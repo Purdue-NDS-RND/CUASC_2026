@@ -78,13 +78,19 @@ It now sends the same two requests used by `simple_takeoff_service`:
 It only requests streams. It does **not** verify that any specific topic
 actually became live afterward.
 
-`check_mavros_streams.sh` is the manual verification helper:
+`preflight_checks.sh` is the manual verification helper:
 
 ```bash
-./check_mavros_streams.sh [stream_rate] [extended_state_rate] [topic_timeout_s]
+./preflight_checks.sh [stream_rate] [extended_state_rate] [topic_timeout_s]
 ```
 
-It calls `set_stream_rate.sh`, then waits for:
+It first verifies that installed YAML configs exactly match the source configs
+for:
+- `src/drone_mission_demo/config`
+- `src/drone_target_cv/config`
+
+Then it calls `check_mavros_streams.sh`, which requests MAVROS streams and
+waits for:
 - `/mavros/imu/data`
 - `/mavros/local_position/pose`
 - `/mavros/extended_state`
@@ -96,7 +102,7 @@ For manual real-hardware workflows such as `drone_live_tests`, verify the
 landing-state stream explicitly before launching missions:
 
 ```bash
-./check_mavros_streams.sh 20
+./preflight_checks.sh 20
 ```
 
 You want `/mavros/extended_state` to publish a non-`UNDEFINED` `landed_state`

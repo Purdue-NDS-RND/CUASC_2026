@@ -45,6 +45,15 @@ def test_stream_check_script_matches_readiness_contract():
     assert 'ros2 topic echo --once "${topic}"' in script
 
 
+def test_preflight_checks_config_sync_and_delegates_stream_check():
+    script = (REPO_ROOT / "preflight_checks.sh").read_text(encoding="utf-8")
+    assert "src/drone_mission_demo/config" in script
+    assert "install/drone_mission_demo/share/drone_mission_demo/config" in script
+    assert "src/drone_target_cv/config" in script
+    assert "install/drone_target_cv/share/drone_target_cv/config" in script
+    assert 'check_mavros_streams.sh" "${stream_rate}" "${extended_state_rate}" "${topic_timeout_s}"' in script
+
+
 def test_demo_params_require_extended_state():
     for path in (
         REPO_ROOT / "src/drone_mission_demo/config/params/mission_params.yaml",

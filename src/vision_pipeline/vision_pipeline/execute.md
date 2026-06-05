@@ -57,7 +57,7 @@ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_descrip
 Description: This launch file acts as the conductor for the two heaviest processes in the system. It boots up the image_grabber and yolo_node.
 
 1. **Image Grabber:** Connects to the Arducam via a GStreamer pipeline, instantly rectifies lens distortion using pre-computed calibration matrices, and publishes a perfectly flat image to /camera/image_raw.
-2. **YOLO Node:** Slices the 4K image, runs hardware-accelerated TensorRT inference (yolo26n_v1.0.engine), applies Non-Maximum Suppression, and publishes an array of bounding boxes to /drone_control/detection.
+2. **YOLO Node:** Slices the 4K image, runs hardware-accelerated TensorRT inference (yolo26n_v2.1.engine), applies Non-Maximum Suppression, and publishes an array of bounding boxes to /drone_control/detection.
 
 ```bash
 ros2 launch vision_pipeline vision_demo.launch.py

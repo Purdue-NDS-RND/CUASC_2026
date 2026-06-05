@@ -27,7 +27,7 @@ class YoloNode(Node):
     def __init__(self) -> None:
         super().__init__("yolo_node")
 
-        self.declare_parameter("model_path", "yolo26n_v1.0.engine")
+        self.declare_parameter("model_path", "yolo26n_v2.1.engine")
         self.declare_parameter("conf_threshold", 0.50)
         self.declare_parameter("iou_threshold", 0.50)
         self.declare_parameter("slice_size", 1280)

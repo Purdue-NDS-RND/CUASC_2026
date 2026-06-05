@@ -41,7 +41,7 @@ setup(
     entry_points={
         "console_scripts": [
             "image_grabber = vision_pipeline.image_grabber:main",
-            "compressed_grabber = vision_pipeline.compressed_grabber:main", ## <---- sammy I added this dw about it
+            "compressed_grabber = vision_pipeline.compressed_grabber:main",
             "yolo_node = vision_pipeline.yolo_node:main",
             "mission_logger = vision_pipeline.mission_logger:main", # <-- New!
             "target_cv = vision_pipeline.target_cv:main",

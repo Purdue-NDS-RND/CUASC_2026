@@ -24,7 +24,7 @@ OUTPUT_DIR = "/home/nds02/camera_captures_processed"
 
 LOGS_CSV_DIR = os.path.join(SCRIPT_DIR, "logs_csv")
 
-YOLO_MODEL_PATH = os.path.join(PACKAGE_ROOT, "models", "yolo26n_v1.0.engine")
+YOLO_MODEL_PATH = os.path.join(PACKAGE_ROOT, "models", "yolo26n_v2.1.engine")
 FLIGHT_CONFIG_PATH = os.path.join(PACKAGE_ROOT, "config", "offline_flight_config.yaml")
 CAMERA_INFO_PATH = os.path.join(PACKAGE_ROOT, "config", "arducam_info.yaml")
 OUTPUT_CSV = os.path.join(OUTPUT_DIR, "mission_results.csv")

@@ -15,6 +15,7 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/launch", glob("launch/*.launch.py")),
         ("share/" + package_name + "/config/patterns", glob("config/patterns/*.yaml")),
+        ("share/" + package_name + "/config/waypoints", glob("config/waypoints/*.yaml")),
         ("share/" + package_name + "/config/sequences", glob("config/sequences/*.yaml")),
         ("share/" + package_name + "/config/params", glob("config/params/*.yaml")),
     ],

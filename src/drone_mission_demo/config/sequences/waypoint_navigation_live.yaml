@@ -1,0 +1,23 @@
+mission_sequence:
+  on_failure: abort_and_rtl
+  missions:
+    - type: takeoff
+      name: takeoff
+      config:
+        target_altitude_m: 20.0
+
+    - type: gps_waypoint
+      name: waypoint_navigation
+      config:
+        waypoint_file: ../waypoints/competition_waypoints.yaml
+        waypoint_altitude_m: 20.0
+        arrival_radius_m: 1.0
+        arrival_alt_tolerance_m: 2.0
+        hold_time_s: 0.5
+        desired_yaw_deg: 90.0
+        mode: waypoint_navigation
+
+    - type: rtl
+      name: rtl
+      config:
+        rtl_mode: "RTL"

@@ -1,0 +1,28 @@
+# Sim-friendly 7-waypoint route near:
+#   latitude: -35.3632621
+#   longitude: 149.1652374
+#
+# The route is ordered as a loose zig-zag with a rounded right-side edge. Replace
+# these coordinates with official competition waypoints before real scoring runs.
+waypoints:
+  - name: wp1
+    latitude: -35.3627231
+    longitude: 149.1652374
+  - name: wp2
+    latitude: -35.3622740
+    longitude: 149.1665042
+  - name: wp3
+    latitude: -35.3617350
+    longitude: 149.1655128
+  - name: wp4
+    latitude: -35.3611960
+    longitude: 149.1668346
+  - name: wp5
+    latitude: -35.3615553
+    longitude: 149.1677159
+  - name: wp6
+    latitude: -35.3624087
+    longitude: 149.1680463
+  - name: wp7
+    latitude: -35.3629477
+    longitude: 149.1671651

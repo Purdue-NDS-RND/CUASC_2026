@@ -3,6 +3,7 @@
 #   "numpy",
 #   "scipy",
 #   "opencv-python",
+#   "scikit-learn",
 # ]
 # ///
 """
@@ -12,10 +13,11 @@ Runs the complete clustering pipeline twice:
   1. mission_log_full.csv  → target_clusters/full/
   2. mission_log_prime.csv → target_clusters/prime/
 
-Then prints a side-by-side comparison so you can immediately see how
-much the prime filter tightens your GPS centroids.
+Clustering:  K-Means++ with k=EXPECTED_TARGETS (default 9).
+             Uses 50 random restarts for initialization stability.
+Centroids:   Simple mean of latitude and longitude.
 
-Update FLIGHT_DIR below to point at your flight folder, then run:
+Update FLIGHT_DIR and EXPECTED_TARGETS before each run, then:
     python target_clustering.py
 """
 
@@ -26,13 +28,12 @@ import shutil
 
 import cv2
 import numpy as np
-import scipy.cluster.hierarchy as hcluster
+from sklearn.cluster import KMeans
 
 # ---------------------------------------------------------------------------
-# CONFIGURATION — update FLIGHT_DIR before each run
+# CONFIGURATION — update before each run
 # ---------------------------------------------------------------------------
-FLIGHT_DIR = "/home/nds02/CUASC_Mission_Data/Flight_20260424_205344 copy"
-
+FLIGHT_DIR = "/home/samuel-yoon/training_cuasc_20260507/CUASC_Mission_Data/Flight_20260507_154051"
 CSV_FULL = os.path.join(FLIGHT_DIR, "mission_log_full.csv")
 CSV_PRIME = os.path.join(FLIGHT_DIR, "mission_log_prime.csv")
 
@@ -42,9 +43,9 @@ CLUSTERS_DIR = os.path.join(FLIGHT_DIR, "target_clusters")
 CLUSTERS_FULL_DIR = os.path.join(CLUSTERS_DIR, "full")
 CLUSTERS_PRIME_DIR = os.path.join(CLUSTERS_DIR, "prime")
 
-TOLERANCE = 5  # metres — complete-linkage max diameter per cluster
-R_EARTH = 6378137.0
+EXPECTED_TARGETS = 9
 
+R_EARTH = 6378137.0
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,8 +53,6 @@ R_EARTH = 6378137.0
 
 
 def load_csv(csv_path: str) -> list:
-    """Load a mission log CSV into a list of detection dicts.
-    Handles both old (no Is_Prime) and new (with Is_Prime) formats."""
     detections = []
     with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
@@ -76,7 +75,6 @@ def load_csv(csv_path: str) -> list:
 
 
 def project_to_metres(detections: list):
-    """Project lat/lon to a local flat ENU grid centred on the mean position."""
     mean_lat = np.mean([d["lat"] for d in detections])
     mean_lon = np.mean([d["lon"] for d in detections])
     lat_scale = math.cos(math.radians(mean_lat))
@@ -88,39 +86,37 @@ def project_to_metres(detections: list):
     return np.array(coords), mean_lat, mean_lon
 
 
-def cluster_detections(detections: list, tolerance: float) -> dict:
-    """Run complete-linkage hierarchical clustering. Returns {cluster_id: [detections]}."""
+def cluster_detections(detections: list, k: int = EXPECTED_TARGETS) -> dict:
     if len(detections) == 0:
         return {}
 
     coords, _, _ = project_to_metres(detections)
 
-    if len(detections) == 1:
-        return {1: detections}
+    if len(detections) <= k:
+        return {i + 1: [d] for i, d in enumerate(detections)}
 
-    cluster_ids = hcluster.fclusterdata(
-        coords, t=tolerance, criterion="distance", method="complete"
+    kmeans = KMeans(
+        n_clusters=k,
+        init="k-means++",
+        n_init=50,
+        random_state=42,
     )
+    cluster_ids = kmeans.fit_predict(coords)
 
-    clusters = {}
+    clusters: dict = {}
     for i, cid in enumerate(cluster_ids):
-        clusters.setdefault(cid, []).append(detections[i])
+        clusters.setdefault(cid + 1, []).append(detections[i])
     return clusters
 
 
-def metres_spread(cluster_items: list) -> float:
-    """Max distance from any point to the cluster centroid (metres)."""
+def metres_spread(cluster_items: list, centre_lat: float, centre_lon: float) -> float:
     if len(cluster_items) < 2:
         return 0.0
-    lats = [d["lat"] for d in cluster_items]
-    lons = [d["lon"] for d in cluster_items]
-    clat = np.mean(lats)
-    clon = np.mean(lons)
-    lat_scale = math.cos(math.radians(clat))
+    lat_scale = math.cos(math.radians(centre_lat))
     max_r = 0.0
     for d in cluster_items:
-        dy = (d["lat"] - clat) * R_EARTH * (math.pi / 180.0)
-        dx = (d["lon"] - clon) * R_EARTH * lat_scale * (math.pi / 180.0)
+        dy = (d["lat"] - centre_lat) * R_EARTH * (math.pi / 180.0)
+        dx = (d["lon"] - centre_lon) * R_EARTH * lat_scale * (math.pi / 180.0)
         max_r = max(max_r, math.hypot(dx, dy))
     return max_r
 
@@ -131,10 +127,6 @@ def save_cluster_outputs(
     img_src_dir: str,
     label: str,
 ) -> list:
-    """
-    Write summary CSV, annotation CSV, and cropped chip folders.
-    Returns a list of summary row dicts for the comparison table.
-    """
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir)
@@ -185,9 +177,11 @@ def save_cluster_outputs(
             n = len(items)
             mean_conf = float(np.mean([d["conf"] for d in items]))
             max_conf = float(np.max([d["conf"] for d in items]))
+
             avg_lat = float(np.mean([d["lat"] for d in items]))
             avg_lon = float(np.mean([d["lon"] for d in items]))
-            spread = metres_spread(items)
+
+            spread = metres_spread(items, avg_lat, avg_lon)
 
             sum_writer.writerow(
                 [
@@ -203,7 +197,6 @@ def save_cluster_outputs(
 
             target_folder = os.path.join(output_dir, f"Target_{tid}")
             os.makedirs(target_folder, exist_ok=True)
-            images_copied = 0
 
             for item in items:
                 ann_writer.writerow(
@@ -232,7 +225,6 @@ def save_cluster_outputs(
                         cv2.imwrite(dst, img[y1:y2, x1:x2])
                     else:
                         shutil.copy2(src, dst)
-                    images_copied += 1
                 else:
                     print(f"  ⚠️  Missing image: {src}")
 
@@ -259,9 +251,8 @@ def save_cluster_outputs(
 
 
 def print_comparison(full_rows: list, prime_rows: list):
-    """Side-by-side table showing how the prime filter changed each cluster."""
     print(f"\n{'=' * 75}")
-    print(f"  FULL vs PRIME COMPARISON  (tolerance={TOLERANCE}m, complete linkage)")
+    print(f"  FULL vs PRIME COMPARISON  (K-Means++  k={EXPECTED_TARGETS}  n_init=50)")
     print(f"{'=' * 75}")
     print(f"  {'':10} {'─── FULL ───':>30}   {'─── PRIME ───':>30}")
     print(
@@ -270,7 +261,6 @@ def print_comparison(full_rows: list, prime_rows: list):
     )
     print(f"  {'-' * 73}")
 
-    # Index prime rows by closest lat/lon match to each full row
     def find_prime_match(full_row):
         if not prime_rows:
             return None
@@ -288,7 +278,7 @@ def print_comparison(full_rows: list, prime_rows: list):
             return math.hypot(dx, dy)
 
         best = min(prime_rows, key=dist)
-        return best if dist(best) < 50 else None  # only match within 50m
+        return best if dist(best) < 50 else None
 
     for fr in sorted(full_rows, key=lambda r: r["tid"]):
         pr = find_prime_match(fr)
@@ -317,15 +307,9 @@ def print_comparison(full_rows: list, prime_rows: list):
     print()
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
 def main():
     os.makedirs(CLUSTERS_DIR, exist_ok=True)
 
-    # ── Full CSV ──────────────────────────────────────────────────────────
     full_rows = []
     if os.path.exists(CSV_FULL):
         print(f"\n{'=' * 65}")
@@ -334,18 +318,12 @@ def main():
         full_dets = load_csv(CSV_FULL)
         print(f"  Loaded {len(full_dets)} detections")
         if full_dets:
-            full_clusters = cluster_detections(full_dets, TOLERANCE)
-            print(f"  → {len(full_clusters)} clusters at {TOLERANCE}m tolerance")
+            full_clusters = cluster_detections(full_dets, k=EXPECTED_TARGETS)
+            print(f"  → {EXPECTED_TARGETS} clusters (K-Means++, n_init=50)")
             full_rows = save_cluster_outputs(
                 full_clusters, CLUSTERS_FULL_DIR, PROCESSED_IMG_DIR, "FULL"
             )
-    else:
-        print(f"\n⚠️  Full CSV not found: {CSV_FULL}")
-        print(
-            "   (This is expected if you haven't flown with the updated mission_logger yet)"
-        )
 
-    # ── Prime CSV ─────────────────────────────────────────────────────────
     prime_rows = []
     if os.path.exists(CSV_PRIME):
         print(f"\n{'=' * 65}")
@@ -354,18 +332,12 @@ def main():
         prime_dets = load_csv(CSV_PRIME)
         print(f"  Loaded {len(prime_dets)} detections (center-zone only)")
         if prime_dets:
-            prime_clusters = cluster_detections(prime_dets, TOLERANCE)
-            print(f"  → {len(prime_clusters)} clusters at {TOLERANCE}m tolerance")
+            prime_clusters = cluster_detections(prime_dets, k=EXPECTED_TARGETS)
+            print(f"  → {EXPECTED_TARGETS} clusters (K-Means++, n_init=50)")
             prime_rows = save_cluster_outputs(
                 prime_clusters, CLUSTERS_PRIME_DIR, PROCESSED_IMG_DIR, "PRIME"
             )
-    else:
-        print(f"\n⚠️  Prime CSV not found: {CSV_PRIME}")
-        print(
-            "   (This file is written by the updated mission_logger — fly again to generate it)"
-        )
 
-    # ── Comparison ────────────────────────────────────────────────────────
     if full_rows and prime_rows:
         print_comparison(full_rows, prime_rows)
     elif full_rows:

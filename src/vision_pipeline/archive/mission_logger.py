@@ -1,13 +1,27 @@
 """
-Mission Logger Node (A/B Testing Edition)
+Mission Logger Node
 
-Runs two raycasting algorithms in parallel for every detection:
-  V1 (Legacy) : Uses the nearest historical pose (up to 200ms error).
-  V2 (Interp) : Mathematically interpolates the exact pose at shutter time.
+Runs two tasks in parallel:
 
-Outputs 4 CSVs:
-  - mission_log_full_v1.csv  / mission_log_prime_v1.csv
-  - mission_log_full_v2.csv  / mission_log_prime_v2.csv
+1. CONTINUOUS RECORDER  – saves every single incoming frame as a JPEG
+   to  <save_dir>/frames/  so you have a complete flight record.
+
+2. TARGET GEOLOCATOR    – time-synchronises images with YOLO detections,
+   raycasts each detection to the ground plane, and writes GPS coordinates
+   to mission_log.csv.  Annotated images of new targets are saved separately
+   to  <save_dir>/targets/.
+
+Prime/Edge filter
+-----------------
+Each detection is classified by its pixel position in the frame:
+  - PRIME (green)  : center 60% of the image — lowest angular error,
+                     closest to nadir, most accurate GPS raycast.
+  - EDGE  (orange) : outer 20% margin on any side — higher distortion
+                     and angular error.
+
+Two CSVs are written:
+  mission_log_full.csv  — every logged detection (prime + edge)
+  mission_log_prime.csv — prime-only detections for high-accuracy clustering
 """
 
 import csv
@@ -36,7 +50,6 @@ from rclpy.qos import (
     qos_profile_sensor_data,
 )
 from scipy.spatial.transform import Rotation as R_scipy
-from scipy.spatial.transform import Slerp
 from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection2DArray
 
@@ -58,12 +71,10 @@ class MissionLogger(Node):
         os.makedirs(self._frames_dir, exist_ok=True)
         os.makedirs(self._targets_dir, exist_ok=True)
 
-        # 4 CSVs for A/B Testing
-        self.csv_full_v1 = os.path.join(self.save_dir, "mission_log_full_v1.csv")
-        self.csv_prime_v1 = os.path.join(self.save_dir, "mission_log_prime_v1.csv")
-        self.csv_full_v2 = os.path.join(self.save_dir, "mission_log_full_v2.csv")
-        self.csv_prime_v2 = os.path.join(self.save_dir, "mission_log_prime_v2.csv")
-        self._init_csvs()
+        # Two CSVs: full log (prime + edge) and prime-only for clustering
+        self.csv_path = os.path.join(self.save_dir, "mission_log_full.csv")
+        self.csv_path_prime = os.path.join(self.save_dir, "mission_log_prime.csv")
+        self._init_csv()
 
         # ------------------------------------------------------------------
         # State
@@ -72,9 +83,10 @@ class MissionLogger(Node):
         self._target_counter = 1
         self._last_continuous_save_time = 0.0
 
-        # Separate deduplication trackers for V1 and V2
-        self.saved_target_locations_v1: List[Tuple[float, float]] = []
-        self.saved_target_locations_v2: List[Tuple[float, float]] = []
+        # saved_target_locations tracks PRIME detections only.
+        # This prevents an early edge detection of a target from permanently
+        # blocking a later, more accurate prime detection of the same target.
+        self.saved_target_locations: List[Tuple[float, float]] = []
         self.min_dist_m = 1.0
 
         self.cv_bridge = CvBridge()
@@ -82,12 +94,10 @@ class MissionLogger(Node):
         self.camera_model = image_geometry.PinholeCameraModel()
         self.camera_info_received = False
 
+        # Sync diagnostics
         self._synced_callbacks = 0
+        self._successful_raycasts = 0
         self._last_pose_log_time = 0.0
-
-        self._drone_pose = None
-        self._pose_history = deque(maxlen=200)  # ~10 s at 20 Hz
-        self._home = None
 
         # ------------------------------------------------------------------
         # Parameters
@@ -113,9 +123,17 @@ class MissionLogger(Node):
             self.get_parameter("mount_yaw").get_parameter_value().double_value
         )
 
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
+        self._drone_pose = None
+        self._pose_history = deque(maxlen=200)  # ~10 s at 20 Hz
+        self._home = None
+
         # ------------------------------------------------------------------
         # Subscribers
         # ------------------------------------------------------------------
+        # BEST_EFFORT for camera topics (matches image_grabber QoS)
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
@@ -132,6 +150,8 @@ class MissionLogger(Node):
             qos_profile_sensor_data,
         )
 
+        # TRANSIENT_LOCAL so we still receive home position even if we
+        # subscribe after MAVROS first published it
         home_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -142,11 +162,14 @@ class MissionLogger(Node):
             HomePosition, "/mavros/home_position/home", self._on_home, home_qos
         )
 
+        # --- Synchroniser setup ---
+        # img_sub doubles as the continuous recorder via registerCallback.
         img_sub = message_filters.Subscriber(
             self, Image, "/camera/image_raw", qos_profile=qos_profile
         )
         img_sub.registerCallback(self._on_every_frame)
 
+        # Detections published RELIABLE so we never silently drop them
         det_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -156,9 +179,12 @@ class MissionLogger(Node):
             self, Detection2DArray, "/drone_control/detection", qos_profile=det_qos
         )
 
+        # TimeSynchronizer requires exact timestamp match — impossible to pair
+        # a detection with the wrong frame.  queue_size=60 ≈ 3.5 s at 17 fps.
         self.ts = message_filters.TimeSynchronizer([img_sub, det_sub], queue_size=60)
         self.ts.registerCallback(self._on_synced_data)
 
+        # Periodic readiness check — cancels itself once all prerequisites are met
         self._readiness_timer = self.create_timer(3.0, self._log_readiness)
 
         self.get_logger().info(
@@ -176,7 +202,8 @@ class MissionLogger(Node):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    def _init_csvs(self):
+
+    def _init_csv(self):
         headers = [
             "Image_Name",
             "Latitude",
@@ -189,16 +216,13 @@ class MissionLogger(Node):
             "BBox_H",
             "Is_Prime",
         ]
-        for path in [
-            self.csv_full_v1,
-            self.csv_prime_v1,
-            self.csv_full_v2,
-            self.csv_prime_v2,
-        ]:
-            with open(path, mode="w", newline="") as f:
-                csv.writer(f).writerow(headers)
+        with open(self.csv_path, mode="w", newline="") as f:
+            csv.writer(f).writerow(headers)
+        with open(self.csv_path_prime, mode="w", newline="") as f:
+            csv.writer(f).writerow(headers)
 
     def _log_readiness(self):
+        """Fires every 3 s until all prerequisites are met."""
         if (
             self.camera_info_received
             and self._drone_pose is not None
@@ -206,6 +230,7 @@ class MissionLogger(Node):
         ):
             self.get_logger().info("✅ All systems ready — GPS logging is ACTIVE.")
             self._readiness_timer.cancel()
+            return
 
         self.get_logger().warn(
             f"⏳ Waiting for prerequisites:\n"
@@ -217,6 +242,7 @@ class MissionLogger(Node):
     # ------------------------------------------------------------------
     # Subscriber callbacks
     # ------------------------------------------------------------------
+
     def _on_camera_info(self, msg: CameraInfo) -> None:
         if not self.camera_info_received:
             self.camera_model.fromCameraInfo(msg)
@@ -228,9 +254,6 @@ class MissionLogger(Node):
             )
 
     def _on_pose(self, msg: PoseStamped) -> None:
-        if math.isnan(msg.pose.position.x) or math.isnan(msg.pose.position.z):
-            self.get_logger().info("  Position X or Z is NaN")
-            return
         self._drone_pose = msg
         self._pose_history.append(msg)
 
@@ -247,16 +270,31 @@ class MissionLogger(Node):
             self._last_pose_log_time = now
 
     def _on_home(self, msg: HomePosition) -> None:
+        if self._home is None:
+            self.get_logger().info(
+                f"✅ Home position locked!\n"
+                f"   lat={msg.geo.latitude:.7f}  "
+                f"lon={msg.geo.longitude:.7f}  "
+                f"alt={msg.geo.altitude:.2f} m MSL"
+            )
         self._home = msg
+
+    # ------------------------------------------------------------------
+    # Continuous frame recorder (throttled to 1 Hz)
+    # ------------------------------------------------------------------
 
     def _on_every_frame(self, msg: Image) -> None:
         current_time = self.get_clock().now().nanoseconds / 1e9
         if (current_time - self._last_continuous_save_time) < 1.0:
             return
+
         self._frame_counter += 1
         frame = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        filename = f"frame_{self._frame_counter:06d}_{msg.header.stamp.sec}_{msg.header.stamp.nanosec}.jpg"
-        cv2.imwrite(os.path.join(self._frames_dir, filename), frame)
+        stamp_sec = msg.header.stamp.sec
+        stamp_ns = msg.header.stamp.nanosec
+        filename = f"frame_{self._frame_counter:06d}_{stamp_sec}_{stamp_ns}.jpg"
+        path = os.path.join(self._frames_dir, filename)
+        cv2.imwrite(path, frame)
         self._last_continuous_save_time = current_time
 
         self.get_logger().info(
@@ -264,101 +302,9 @@ class MissionLogger(Node):
         )
 
     # ------------------------------------------------------------------
-    # Pose Synchronization Math (A/B)
-    # ------------------------------------------------------------------
-    def _get_pose_at_time_v1_nearest(self, target_stamp):
-        """Legacy logic: Grabs the single closest pose"""
-        if not self._pose_history:
-            return None
-        target_sec = target_stamp.sec + target_stamp.nanosec * 1e-9
-        best_pose = min(
-            self._pose_history,
-            key=lambda p: abs(
-                (p.header.stamp.sec + p.header.stamp.nanosec * 1e-9) - target_sec
-            ),
-        )
-        best_sec = best_pose.header.stamp.sec + best_pose.header.stamp.nanosec * 1e-9
-        delta_ms = abs(best_sec - target_sec) * 1000
-
-        if abs(delta_ms) * 1000 > 200:
-            self.get_logger().warn(
-                f"Best pose is {delta_ms:.0f}ms from image stamp — rejecting. "
-                "Ensure Jetson and Pixhawk clocks are synced."
-            )
-            return None
-
-        self.get_logger().info(
-            f"      [PoseSync] matched pose {delta_ms:.1f}ms from image stamp"
-        )
-        return best_pose
-
-    def _get_pose_at_time_v2_interpolated(self, target_stamp):
-        """New logic: Interpolates exact pose at shutter time"""
-        if len(self._pose_history) < 2:
-            return None
-
-        target_sec = target_stamp.sec + target_stamp.nanosec * 1e-9
-        poses = sorted(
-            self._pose_history,
-            key=lambda p: p.header.stamp.sec + p.header.stamp.nanosec * 1e-9,
-        )
-
-        before, after = None, None
-        for p in poses:
-            p_sec = p.header.stamp.sec + p.header.stamp.nanosec * 1e-9
-            if p_sec <= target_sec:
-                before = p
-            elif p_sec > target_sec and after is None:
-                after = p
-                break
-
-        if before is None or after is None:
-            return None
-
-        t0 = before.header.stamp.sec + before.header.stamp.nanosec * 1e-9
-        t1 = after.header.stamp.sec + after.header.stamp.nanosec * 1e-9
-
-        if (t1 - t0) == 0 or (target_sec - t0) > 0.2 or (t1 - target_sec) > 0.2:
-            return None
-
-        alpha = (target_sec - t0) / (t1 - t0)
-
-        # LERP Position
-        interp_pose = PoseStamped()
-        interp_pose.header.stamp = target_stamp
-        p0, p1 = before.pose.position, after.pose.position
-        interp_pose.pose.position.x = p0.x + alpha * (p1.x - p0.x)
-        interp_pose.pose.position.y = p0.y + alpha * (p1.y - p0.y)
-        interp_pose.pose.position.z = p0.z + alpha * (p1.z - p0.z)
-
-        # SLERP Orientation
-        rot0 = [
-            before.pose.orientation.x,
-            before.pose.orientation.y,
-            before.pose.orientation.z,
-            before.pose.orientation.w,
-        ]
-        rot1 = [
-            after.pose.orientation.x,
-            after.pose.orientation.y,
-            after.pose.orientation.z,
-            after.pose.orientation.w,
-        ]
-
-        key_rots = R_scipy.from_quat([rot0, rot1])
-        slerp = Slerp([t0, t1], key_rots)
-        interp_rot = slerp([target_sec])[0].as_quat()
-
-        interp_pose.pose.orientation.x = interp_rot[0]
-        interp_pose.pose.orientation.y = interp_rot[1]
-        interp_pose.pose.orientation.z = interp_rot[2]
-        interp_pose.pose.orientation.w = interp_rot[3]
-
-        return interp_pose
-
-    # ------------------------------------------------------------------
     # Synchronised target geolocator
     # ------------------------------------------------------------------
+
     def _on_synced_data(self, img_msg: Image, det_array_msg: Detection2DArray) -> None:
         self._synced_callbacks += 1
         n_det = len(det_array_msg.detections)
@@ -391,13 +337,17 @@ class MissionLogger(Node):
         margin_x = img_w * 0.20
         margin_y = img_h * 0.20
 
-        # Grab BOTH poses for A/B testing
-        pose_v1 = self._get_pose_at_time_v1_nearest(img_msg.header.stamp)
-        pose_v2 = self._get_pose_at_time_v2_interpolated(img_msg.header.stamp)
-
         targets_logged_this_frame = False
 
+        historical_pose = self._get_pose_at_time(img_msg.header.stamp)
+        if historical_pose is None:
+            self.get_logger().warn(
+                "   ↳ ❌ Dropping frame: No matching historical pose found."
+            )
+            return
+
         for det_idx, det in enumerate(det_array_msg.detections):
+            # Guard: yolo_node should always populate results, but be safe
             if not det.results:
                 self.get_logger().warn(
                     f"   Det {det_idx + 1}/{n_det}: no results field — skipping"
@@ -411,10 +361,15 @@ class MissionLogger(Node):
             bbox_w = det.bbox.size_x
             bbox_h = det.bbox.size_y
 
+            # ---- Prime / edge classification --------------------------------
+            # Classify BEFORE deduplication so we always know which zone fired.
             is_prime = margin_x < u < (img_w - margin_x) and margin_y < v < (
                 img_h - margin_y
             )
             zone_label = "PRIME" if is_prime else "EDGE"
+            # Green for prime (accurate), orange for edge (higher angular error)
+            box_color = (0, 255, 0) if is_prime else (0, 165, 255)
+            # -----------------------------------------------------------------
 
             self.get_logger().info(
                 f"   Det {det_idx + 1}/{n_det}: "
@@ -422,100 +377,40 @@ class MissionLogger(Node):
                 f"pixel=({u:.0f}, {v:.0f}) zone={zone_label}"
             )
 
-            # Process V1 (Legacy)
-            gps_v1 = self._raycast_to_gps(u, v, pose_v1) if pose_v1 else None
-            # Process V2 (Interpolated)
-            gps_v2 = self._raycast_to_gps(u, v, pose_v2) if pose_v2 else None
-
-            if gps_v1 is None and gps_v2 is None:
+            gps_coord = self._raycast_to_gps(u, v, historical_pose)
+            if gps_coord is None:
                 self.get_logger().warn(
                     f"   ↳ ❌ Raycast returned None for pixel ({u:.0f}, {v:.0f})"
                 )
                 continue
 
-            image_filename = f"target_{self._target_counter:03d}.jpg"
-            time_utc = datetime.utcnow().strftime("%H:%M:%S")
+            target_lat, target_lon = gps_coord
+            self._successful_raycasts += 1
+            self.get_logger().info(
+                f"   ↳ ✅ Raycast [{zone_label}] → "
+                f"lat={target_lat:.7f}  lon={target_lon:.7f} "
+                f"(total raycasts: {self._successful_raycasts})"
+            )
 
-            # Write V1 Results
-            if gps_v1:
-                lat_v1, lon_v1 = gps_v1
-                is_duplicate_v1 = any(
-                    self._calculate_distance_m(lat_v1, lon_v1, lat, lon)
-                    < self.min_dist_m
-                    for lat, lon in self.saved_target_locations_v1
-                )
-
-                if is_duplicate_v1:
-                    self.get_logger().info(
-                        f"   ↳ ⏭️  Duplicate (v1) [{zone_label}] — "
-                        f"within {self.min_dist_m}m of a known prime target"
-                    )
-
-                if not is_duplicate_v1:
-                    row_v1 = [
-                        image_filename,
-                        f"{lat_v1:.7f}",
-                        f"{lon_v1:.7f}",
-                        time_utc,
-                        f"{confidence:.2f}",
-                        int(u),
-                        int(v),
-                        int(bbox_w),
-                        int(bbox_h),
-                        str(is_prime),
-                    ]
-                    with open(self.csv_full_v1, mode="a", newline="") as f:
-                        csv.writer(f).writerow(row_v1)
-                    if is_prime:
-                        with open(self.csv_prime_v1, mode="a", newline="") as f:
-                            csv.writer(f).writerow(row_v1)
-                        self.saved_target_locations_v1.append((lat_v1, lon_v1))
-                    self.get_logger().info(
-                        f"   ↳ 📝 LOGGED [{zone_label}]: {image_filename} "
-                        f"lat={lat_v1:.7f} lon={lon_v1:.7f} conf={confidence:.2f}"
-                    )
-            # Write V2 Results
-            if gps_v2:
-                lat_v2, lon_v2 = gps_v2
-                is_duplicate_v2 = any(
-                    self._calculate_distance_m(lat_v2, lon_v2, lat, lon)
-                    < self.min_dist_m
-                    for lat, lon in self.saved_target_locations_v2
-                )
-
-                if not is_duplicate_v2:
-                    row_v2 = [
-                        image_filename,
-                        f"{lat_v2:.7f}",
-                        f"{lon_v2:.7f}",
-                        time_utc,
-                        f"{confidence:.2f}",
-                        int(u),
-                        int(v),
-                        int(bbox_w),
-                        int(bbox_h),
-                        str(is_prime),
-                    ]
-                    with open(self.csv_full_v2, mode="a", newline="") as f:
-                        csv.writer(f).writerow(row_v2)
-                    if is_prime:
-                        with open(self.csv_prime_v2, mode="a", newline="") as f:
-                            csv.writer(f).writerow(row_v2)
-                        self.saved_target_locations_v2.append((lat_v2, lon_v2))
-
-            # Live Delta Logging
-            if gps_v1 and gps_v2:
-                delta_m = self._calculate_distance_m(
-                    gps_v1[0], gps_v1[1], gps_v2[0], gps_v2[1]
-                )
+            # ---- Deduplication ----------------------------------------------
+            # We deduplicate against saved_target_locations which contains
+            # PRIME detections only.  This means:
+            #   - An early edge detection never blocks a later prime detection
+            #     of the same target.
+            #   - Once a prime detection claims a target, subsequent observations
+            #     (prime or edge) of the same target are deduplicated normally.
+            is_duplicate = any(
+                self._calculate_distance_m(target_lat, target_lon, lat, lon)
+                < self.min_dist_m
+                for lat, lon in self.saved_target_locations
+            )
+            if is_duplicate:
                 self.get_logger().info(
-                    f"   ↳ 📝 [{zone_label}] Delta between V1/V2 Math: {delta_m:.2f} meters"
+                    f"   ↳ ⏭️  Duplicate [{zone_label}] — "
+                    f"within {self.min_dist_m}m of a known prime target"
                 )
-
-            targets_logged_this_frame = True
-
-            # Annotate and save image
-            box_color = (0, 255, 0) if is_prime else (0, 165, 255)
+                continue
+            # -----------------------------------------------------------------
 
             # Annotate frame with zone colour
             x1 = int(u - bbox_w / 2)
@@ -524,6 +419,53 @@ class MissionLogger(Node):
             y2 = int(v + bbox_h / 2)
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 6)
+            cv2.circle(frame, (int(u), int(v)), 12, box_color, -1)
+            text = f"[{zone_label}] Lat:{target_lat:.6f} Lon:{target_lon:.6f}"
+            cv2.putText(
+                frame,
+                text,
+                (int(u) - 100, int(v) - 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.5,
+                box_color,
+                4,
+            )
+
+            # Build the CSV row once and reuse it
+            image_filename = f"target_{self._target_counter:03d}.jpg"
+            time_utc = datetime.utcnow().strftime("%H:%M:%S")
+            row_data = [
+                image_filename,
+                f"{target_lat:.7f}",
+                f"{target_lon:.7f}",
+                time_utc,
+                f"{confidence:.2f}",
+                int(u),
+                int(v),
+                int(bbox_w),
+                int(bbox_h),
+                str(is_prime),
+            ]
+
+            # Always write to the full log
+            with open(self.csv_path, mode="a", newline="") as f:
+                csv.writer(f).writerow(row_data)
+
+            # Only write to the prime log when detection is in the center zone
+            if is_prime:
+                with open(self.csv_path_prime, mode="a", newline="") as f:
+                    csv.writer(f).writerow(row_data)
+
+            self.get_logger().info(
+                f"   ↳ 📝 LOGGED [{zone_label}]: {image_filename} "
+                f"lat={target_lat:.7f} lon={target_lon:.7f} conf={confidence:.2f}"
+            )
+
+            # Only prime detections claim a slot — preserves the invariant above
+            if is_prime:
+                self.saved_target_locations.append((target_lat, target_lon))
+
+            targets_logged_this_frame = True
 
         if targets_logged_this_frame:
             image_path = os.path.join(
@@ -538,7 +480,17 @@ class MissionLogger(Node):
     # ------------------------------------------------------------------
     # Raycast
     # ------------------------------------------------------------------
+
     def _raycast_to_gps(self, u: float, v: float, pose: PoseStamped):
+        """
+        Mirrors offline_photogrammetry.py exactly:
+          pixel → optical ray → NED body (hardcoded nadir axis swap)
+          → mount correction → world NED (ArduPilot ZYX)
+          → world ENU → ground intersection → GPS offset
+
+        Does NOT call rectifyPoint — image_grabber already applied cv2.remap.
+        """
+
         # Step A: pixel → normalised optical ray
         fx = self.camera_model.fx()
         fy = self.camera_model.fy()
@@ -554,9 +506,16 @@ class MissionLogger(Node):
             f"ray_opt={ray_opt.round(4).tolist()}"
         )
 
+        # Step B: optical → NED body (nadir axis swap + mount correction)
+        #   Opt X (right) → NED  Y
+        #   Opt Y (down)  → NED -X
+        #   Opt Z (fwd)   → NED  Z (down)
         ray_body_ned = np.array([-ray_opt[1], ray_opt[0], ray_opt[2]])
+
         mount_r = R_scipy.from_euler(
-            "xyz", [self._mount_roll, self._mount_pitch, self._mount_yaw], degrees=True
+            "xyz",
+            [self._mount_roll, self._mount_pitch, self._mount_yaw],
+            degrees=True,
         )
         ray_body_ned = mount_r.apply(ray_body_ned)
 
@@ -564,6 +523,7 @@ class MissionLogger(Node):
             f"      [Raycast] ray_body_ned={ray_body_ned.round(4).tolist()}"
         )
 
+        # Step C: NED body → world NED  (ArduPilot ZYX from MAVROS ENU quat)
         q = pose.pose.orientation
         r_enu = R_scipy.from_quat([q.x, q.y, q.z, q.w])
         roll_enu, pitch_enu, yaw_enu = r_enu.as_euler("xyz", degrees=False)
@@ -579,10 +539,10 @@ class MissionLogger(Node):
             f"yaw={math.degrees(yaw):.2f}°"
         )
 
-        drone_r_ned = R_scipy.from_euler(
-            "ZYX", [math.pi / 2.0 - yaw_enu, -pitch_enu, roll_enu], degrees=False
-        )
+        drone_r_ned = R_scipy.from_euler("ZYX", [yaw, pitch, roll], degrees=False)
         ray_world_ned = drone_r_ned.apply(ray_body_ned)
+
+        # Step D: world NED → world ENU
         ray_world_enu = np.array(
             [ray_world_ned[1], ray_world_ned[0], -ray_world_ned[2]]
         )
@@ -591,6 +551,7 @@ class MissionLogger(Node):
             f"      [Raycast] ray_world_enu={ray_world_enu.round(4).tolist()}"
         )
 
+        # Camera physical offset rotated into world ENU
         mount_offset_ned = np.array([self._mount_x, self._mount_y, self._mount_z])
         cam_offset_ned = drone_r_ned.apply(mount_offset_ned)
         cam_offset_enu = np.array(
@@ -599,8 +560,6 @@ class MissionLogger(Node):
 
         drone_pos = pose.pose.position
         cam_z = drone_pos.z + cam_offset_enu[2]
-
-        # Standard YAML Ground altitude (LiDAR removed per request)
         ground_z = (
             self.get_parameter("ground_altitude_m").get_parameter_value().double_value
         )
@@ -610,6 +569,7 @@ class MissionLogger(Node):
             f"cam_z={cam_z:.2f}m  ground_z={ground_z:.2f}m"
         )
 
+        # Step E: ground plane intersection
         if abs(ray_world_enu[2]) < 1e-6:
             self.get_logger().warn("      [Raycast] ❌ dropped — ray nearly horizontal")
             return None
@@ -623,9 +583,11 @@ class MissionLogger(Node):
 
         self.get_logger().info(f"      [Raycast] t={t:.2f} m (ray length to ground)")
 
+        # drone_pos.x/y are the drone's ENU offset from home — must be included
         target_x = drone_pos.x + cam_offset_enu[0] + t * ray_world_enu[0]
         target_y = drone_pos.y + cam_offset_enu[1] + t * ray_world_enu[1]
 
+        # Step F: metric ENU offset → GPS
         lat0 = self._home.geo.latitude
         lon0 = self._home.geo.longitude
         lat_offset = (target_y / self.R_EARTH) * (180.0 / math.pi)
@@ -643,6 +605,10 @@ class MissionLogger(Node):
 
         return (final_lat, final_lon)
 
+    # ------------------------------------------------------------------
+    # Distance helper
+    # ------------------------------------------------------------------
+
     def _calculate_distance_m(
         self, lat1: float, lon1: float, lat2: float, lon2: float
     ) -> float:
@@ -654,6 +620,40 @@ class MissionLogger(Node):
             * (math.pi / 180.0)
         )
         return math.hypot(dx, dy)
+
+    # ------------------------------------------------------------------
+    # Pose history lookup
+    # ------------------------------------------------------------------
+
+    def _get_pose_at_time(self, target_stamp):
+        """Return the pose whose timestamp is closest to target_stamp,
+        or None if the closest match is more than 200 ms away."""
+        if not self._pose_history:
+            return None
+
+        target_sec = target_stamp.sec + target_stamp.nanosec * 1e-9
+
+        best_pose = min(
+            self._pose_history,
+            key=lambda p: abs(
+                (p.header.stamp.sec + p.header.stamp.nanosec * 1e-9) - target_sec
+            ),
+        )
+
+        best_sec = best_pose.header.stamp.sec + best_pose.header.stamp.nanosec * 1e-9
+        delta_ms = abs(best_sec - target_sec) * 1000
+
+        if delta_ms > 200:
+            self.get_logger().warn(
+                f"Best pose is {delta_ms:.0f}ms from image stamp — rejecting. "
+                "Ensure Jetson and Pixhawk clocks are synced."
+            )
+            return None
+
+        self.get_logger().info(
+            f"      [PoseSync] matched pose {delta_ms:.1f}ms from image stamp"
+        )
+        return best_pose
 
 
 def main():

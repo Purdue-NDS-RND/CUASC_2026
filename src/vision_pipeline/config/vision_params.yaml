@@ -18,11 +18,11 @@ yolo_node:
 
 mission_logger:
     ros__parameters:
-        mount_x: 0.2667
-        mount_y: 0.03
-        mount_z: 0.40005
+        mount_x: 0.155575
+        mount_y: 0.047625
+        mount_z: 0.2413
         mount_roll: 0.0
         mount_pitch: 0.0
-        mount_yaw: 180.0
+        mount_yaw: 0.0
         ground_altitude_m: 0.0
         show_debug_window: false

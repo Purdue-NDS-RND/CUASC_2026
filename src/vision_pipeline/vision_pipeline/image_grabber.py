@@ -190,7 +190,7 @@ class ImageGrabber(Node):
             else ""
         )
         pipeline = (
-            f"nvarguscamerasrc sensor-id=0 {exp_str} wbmode={wb_mode} ! "
+            f"nvarguscamerasrc {exp_str} wbmode={wb_mode} ! "
             f"video/x-raw(memory:NVMM), width={width}, height={height}, "
             f"format=NV12, framerate={fps}/1 ! "
             f"nvvidconv ! video/x-raw, format=BGRx ! "

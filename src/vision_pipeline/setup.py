@@ -45,6 +45,7 @@ setup(
             "yolo_node = vision_pipeline.yolo_node:main",
             "mission_logger = vision_pipeline.mission_logger:main", # <-- New!
             "target_cv = vision_pipeline.target_cv:main",
-        ],
+            "data_logger_node = vision_pipeline.data_logger_node:main",  # <-- ADD THIS LINE
+         ],
     },
 )

@@ -15,7 +15,7 @@ mission_sequence:
         target_longitude: 149.1653479              # GPS longitude of the drop target.
         transit_altitude_m: 15.0                   # Cruise altitude used while flying to the target area.
         drop_altitude_m: 4.0                       # Target altitude for the package release.
-        fake_drop: true                            # Simulate payload release without opening the sprayer actuator.
+        fake_drop: true                            # Simulate payload release without sending the sprayer release command.
         descent_rate_mps: 0.35                     # Descent speed while centered over the target.
         camera_fx_px: 2334.99647                   # Camera focal length in pixels along the x-axis.
         camera_fy_px: 2338.06625                   # Camera focal length in pixels along the y-axis.

@@ -111,7 +111,7 @@ It:
 - holds briefly on target-loss flicker before climbing for recovery
 - freezes the current GPS lat/lon for the final drop column once low and centered
 - bounds target-loss recovery with `max_recovery_altitude_m` and `max_recovery_attempts`
-- supports `fake_drop: true` for simulation-only testing, which still uses GPS transit and vision tracking but skips the real sprayer-open actuation step after the normal drop hover
+- supports `fake_drop: true` for simulation-only testing, which still uses GPS transit and vision tracking but skips the real sprayer release command after the normal drop hover
 - can use `failure_policy: continue_to_next` so a failed drop falls through to the next mission in the sequence
 
 Drop-specific vision tuning keys:

@@ -305,9 +305,9 @@ class PackageDropMission(RedBullseyeMissionBase):
         if not context.command_service_ready():
             return MissionStatus.WAITING
 
-        context.logger.info(f"[{self.name}] Opening sprayer for payload drop")
+        context.logger.info(f"[{self.name}] Closing sprayer for payload drop")
         context.command_sprayer(
-            enable=True,
+            enable=False,
             done_callback=self._on_sprayer_response,
         )
         self._actuator_requested = True

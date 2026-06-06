@@ -4,13 +4,13 @@ mission_sequence:
     - type: takeoff
       name: takeoff
       config:
-        target_altitude_m: 20.0
+        target_altitude_m: 15.24
 
     - type: gps_waypoint
       name: waypoint_navigation
       config:
         waypoint_file: ../waypoints/competition_waypoints.yaml
-        waypoint_altitude_m: 20.0
+        waypoint_altitude_m: 15.24
         arrival_radius_m: 1.0
         arrival_alt_tolerance_m: 2.0
         hold_time_s: 0.5
@@ -24,8 +24,8 @@ mission_sequence:
         # Live-flight template: edit these coordinates before real flight.
         # The copied defaults below are inherited from the simulation demo and
         # are not safe operating coordinates on a real field.
-        target_latitude: 40.4278733
-        target_longitude: -86.9283805
+        target_latitude: 35.050012
+        target_longitude: -118.151214
         transit_altitude_m: 15.0
         drop_altitude_m: 6.0
         fake_drop: false

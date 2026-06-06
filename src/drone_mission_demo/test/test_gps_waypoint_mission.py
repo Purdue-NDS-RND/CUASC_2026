@@ -247,6 +247,7 @@ class GpsWaypointMissionTests(unittest.TestCase):
         self.assertEqual([wp.name for wp in mission._waypoints], ["wp1", "wp2"])
         self.assertEqual(mission._waypoints[0].latitude, 40.0)
         self.assertEqual(mission._waypoints[1].longitude, -86.0001)
+        self.assertEqual(mission._waypoints[0].altitude_m, 20.0)
 
     def test_loads_waypoint_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -259,6 +260,7 @@ class GpsWaypointMissionTests(unittest.TestCase):
                                 "name": "start",
                                 "latitude": 40.1,
                                 "longitude": -86.1,
+                                "altitude_agl_ft": 150,
                             }
                         ]
                     }
@@ -272,6 +274,27 @@ class GpsWaypointMissionTests(unittest.TestCase):
 
         self.assertEqual(len(mission._waypoints), 1)
         self.assertEqual(mission._waypoints[0].name, "start")
+        self.assertAlmostEqual(mission._waypoints[0].altitude_m, 45.72)
+
+    def test_converts_feet_altitude_to_global_setpoint_meters(self) -> None:
+        mission = make_mission(
+            waypoints=[
+                {
+                    "name": "wp1",
+                    "latitude": 40.0,
+                    "longitude": -86.0,
+                    "altitude_agl_ft": 50,
+                }
+            ]
+        )
+        context = FakeContext()
+
+        mission.update(context)
+        mission.update(context)
+        mission.update(context)
+
+        self.assertEqual(context.global_position_commands[-1][:2], (40.0, -86.0))
+        self.assertAlmostEqual(context.global_position_commands[-1][2], 15.24)
 
     def test_fails_cleanly_when_no_waypoints_configured(self) -> None:
         context = FakeContext()

@@ -4,13 +4,13 @@ mission_sequence:
     - type: takeoff
       name: takeoff
       config:
-        target_altitude_m: 20.0
+        target_altitude_m: 15.24
 
     - type: gps_waypoint
       name: waypoint_navigation
       config:
         waypoint_file: ../waypoints/competition_waypoints.yaml
-        waypoint_altitude_m: 20.0
+        waypoint_altitude_m: 15.24
         arrival_radius_m: 1.0
         arrival_alt_tolerance_m: 2.0
         hold_time_s: 0.5

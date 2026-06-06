@@ -16,6 +16,7 @@ from drone_mission_core.registry import register_mission
 
 
 EARTH_RADIUS_M = 6_371_000.0
+FEET_TO_METERS = 0.3048
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class GpsWaypoint:
     name: str
     latitude: float
     longitude: float
+    altitude_m: float
 
 
 class GpsWaypointState(Enum):
@@ -203,9 +205,19 @@ class GpsWaypointMission(BaseMission):
                     name = raw_name.strip()
                 latitude = entry.get("latitude")
                 longitude = entry.get("longitude")
+                altitude_m = self._waypoint_altitude_m
+                if "altitude_m" in entry:
+                    altitude_m = float(entry["altitude_m"])
+                elif "altitude_agl_ft" in entry:
+                    altitude_m = float(entry["altitude_agl_ft"]) * FEET_TO_METERS
+                elif "altitude_ft" in entry:
+                    altitude_m = float(entry["altitude_ft"]) * FEET_TO_METERS
             elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
                 latitude = entry[0]
                 longitude = entry[1]
+                altitude_m = self._waypoint_altitude_m
+                if len(entry) >= 3:
+                    altitude_m = float(entry[2])
             else:
                 raise ValueError(
                     f"Malformed GPS waypoint #{index + 1} in mission "
@@ -217,6 +229,7 @@ class GpsWaypointMission(BaseMission):
                     name=name,
                     latitude=float(latitude),
                     longitude=float(longitude),
+                    altitude_m=float(altitude_m),
                 )
             )
         return normalized
@@ -233,7 +246,7 @@ class GpsWaypointMission(BaseMission):
         context.set_global_position_setpoint(
             waypoint.latitude,
             waypoint.longitude,
-            self._waypoint_altitude_m,
+            waypoint.altitude_m,
             yaw_deg=self._desired_yaw_deg,
             lock_yaw=False,
         )
@@ -250,7 +263,7 @@ class GpsWaypointMission(BaseMission):
             waypoint.longitude,
         )
         altitude_error = abs(
-            context.local_pose.pose.position.z - self._waypoint_altitude_m
+            context.local_pose.pose.position.z - waypoint.altitude_m
         )
         return (
             ground_distance <= self._arrival_radius_m

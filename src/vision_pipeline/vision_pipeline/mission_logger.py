@@ -162,14 +162,15 @@ class MissionLogger(Node):
         self._readiness_timer = self.create_timer(3.0, self._log_readiness)
 
         self.get_logger().info(
-            f"🚀 MissionLogger ready.\n"
-            f"   frames      → {self._frames_dir}\n"
-            f"   targets     → {self._targets_dir}\n"
-            f"   full CSV    → {self.csv_path}\n"
-            f"   prime CSV   → {self.csv_path_prime}\n"
+            f"🚀 MissionLogger ready (A/B LERP Testing Enabled).\n"
+            f"   frames        → {self._frames_dir}\n"
+            f"   targets       → {self._targets_dir}\n"
+            f"   V1 full CSV   → {self.csv_full_v1}\n"
+            f"   V1 prime CSV  → {self.csv_prime_v1}\n"
+            f"   V2 full CSV   → {self.csv_full_v2}\n"
+            f"   V2 prime CSV  → {self.csv_prime_v2}\n"
             f"   mount offset (m)  : x={self._mount_x} y={self._mount_y} z={self._mount_z}\n"
-            f"   mount rotation(°) : roll={self._mount_roll} "
-            f"pitch={self._mount_pitch} yaw={self._mount_yaw}\n"
+            f"   mount rotation(°) : roll={self._mount_roll} pitch={self._mount_pitch} yaw={self._mount_yaw}\n"
             f"   sync: TimeSynchronizer queue=60 | min_dist_m: {self.min_dist_m}"
         )
 

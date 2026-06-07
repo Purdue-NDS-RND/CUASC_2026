@@ -303,6 +303,13 @@ class YoloMissionNode(Node):
                 self.get_logger().error(
                     f"Failed to atomically write camera calibration parameters: {e}"
                 )
+                # Reset flag so the next CameraInfo message triggers another attempt
+                self.camera_info_received = False
+                # Clean up the partial .tmp file so it doesn't block the next os.replace()
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     def _on_pose(self, msg: PoseStamped) -> None:
         if math.isnan(msg.pose.position.x) or math.isnan(msg.pose.position.z):

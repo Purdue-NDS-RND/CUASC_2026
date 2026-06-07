@@ -5,7 +5,8 @@ set -euo pipefail
 # Drone Connection Configuration
 # ----------------------------------------------------------
 DRONE_USER="nds01"
-DRONE_IP="192.168.0.149"
+# DRONE_IP="192.168.0.149"
+DRONE_IP="100.97.248.92"
 LOCAL_ROOT="$HOME/post_mission_processing"
 LOCAL_RAYCAST_DIR="$LOCAL_ROOT/raycast_sessions"
 LOCAL_MISSION_DIR="$LOCAL_ROOT/CUASC_Mission_Data"

@@ -282,11 +282,11 @@ class YoloMissionNode(Node):
 
             # Atomic save of physical camera calibration specs for the GUI
             cam_data = {
-                "image_width": msg.width,
-                "image_height": msg.height,
-                "camera_matrix": {"data": list(msg.k)},
-                "distortion_coefficients": {"data": list(msg.d)},
-                "projection_matrix": {"data": list(msg.p)},
+                "image_width": int(msg.width),
+                "image_height": int(msg.height),
+                "camera_matrix": {"data": [float(x) for x in msg.k]},
+                "distortion_coefficients": {"data": [float(x) for x in msg.d]},
+                "projection_matrix": {"data": [float(x) for x in msg.p]},
             }
 
             temp_path = self.camera_info_path + ".tmp"

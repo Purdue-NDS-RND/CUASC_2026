@@ -26,3 +26,7 @@ src/vision_pipeline/models/yolo26n_v1.0.engine
 *.engine
 
 .codex
+
+src/ardupilot/
+src/ardupilot_gazebo/
+src/ardupilot_gz/

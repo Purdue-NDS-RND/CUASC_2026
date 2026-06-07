@@ -307,7 +307,7 @@ class PackageDropMission(RedBullseyeMissionBase):
 
         context.logger.info(f"[{self.name}] Closing sprayer for payload drop")
         context.command_sprayer(
-            enable=False,
+            enable=True,
             done_callback=self._on_sprayer_response,
         )
         self._actuator_requested = True

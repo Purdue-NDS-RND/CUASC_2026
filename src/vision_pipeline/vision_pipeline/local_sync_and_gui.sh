@@ -38,6 +38,8 @@ rsync -avz --progress --exclude="*.tmp" \
 echo "--------------------------------------------------------"
 echo "✅ Synchronization complete! Files stored locally in: $LOCAL_SESSIONS_DIR"
 
+echo "Ensure you cd into the directory of the raycast_gui.py"
+
 # Launch Interactive Ground Station GUI
 GUI_SCRIPT="raycast_gui.py"
 if [ -f "$GUI_SCRIPT" ]; then

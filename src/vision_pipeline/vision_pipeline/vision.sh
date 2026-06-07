@@ -67,4 +67,4 @@ echo "==========================================================================
 
 # 5. Launch the unified yolo mission logger system node
 # Note: Ensure your setup.py has 'yolo_mission_node = vision_pipeline.yolo_mission_node:main'
-ros2 run vision_pipeline yolo_mission_node
+ros2 launch vision_pipeline vision_demo.launch.py

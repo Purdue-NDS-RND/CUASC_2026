@@ -8,346 +8,268 @@
 # ///
 """
 Target Clustering & Chip Sorter — Dual CSV Edition
+Updated with command-line argument parser support to bypass manual hardcoding.
 
-Runs the complete clustering pipeline twice:
-  1. mission_log_full.csv  → target_clusters/full/
-  2. mission_log_prime.csv → target_clusters/prime/
-
-Clustering:  K-Means++ with k=EXPECTED_TARGETS (default 9).
-             Uses 50 random restarts for initialization stability.
-Centroids:   Simple mean of latitude and longitude.
-
-Update FLIGHT_DIR and EXPECTED_TARGETS before each run, then:
-    python target_clustering.py
+Usage:
+    python3 target_clustering.py --flight_dir /path/to/Flight_YYYYMMDD_HHMMSS
 """
 
+import argparse
 import csv
 import math
 import os
 import shutil
+import sys
 
 import cv2
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.cluster import DBSCAN
 
 # ---------------------------------------------------------------------------
-# CONFIGURATION — update before each run
+# DEFAULT CONFIGURATION — used if no CLI arguments are supplied
 # ---------------------------------------------------------------------------
-FLIGHT_DIR = "/home/samuel-yoon/training_cuasc_20260507/CUASC_Mission_Data/Flight_20260507_154051"
-CSV_FULL = os.path.join(FLIGHT_DIR, "mission_log_full.csv")
-CSV_PRIME = os.path.join(FLIGHT_DIR, "mission_log_prime.csv")
-
-PROCESSED_IMG_DIR = os.path.join(FLIGHT_DIR, "targets")
-
-CLUSTERS_DIR = os.path.join(FLIGHT_DIR, "target_clusters")
-CLUSTERS_FULL_DIR = os.path.join(CLUSTERS_DIR, "full")
-CLUSTERS_PRIME_DIR = os.path.join(CLUSTERS_DIR, "prime")
-
-EXPECTED_TARGETS = 9
-
+DEFAULT_FLIGHT_DIR = "/home/samuel-yoon/training_cuasc_20260507/CUASC_Mission_Data/Flight_20260507_154051"
 R_EARTH = 6378137.0
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
+def load_csv(csv_path):
+    if not os.path.exists(csv_path):
+        print(f"  [Warning] CSV File not found: {csv_path}")
+        return []
 
-def load_csv(csv_path: str) -> list:
     detections = []
-    with open(csv_path, "r") as f:
+    with open(csv_path, mode="r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            detections.append(
-                {
-                    "chip_image": row["Image_Name"],
-                    "conf": float(row["YOLO_Confidence"]),
-                    "lat": float(row["Latitude"]),
-                    "lon": float(row["Longitude"]),
-                    "time": row["Time_UTC"],
-                    "u": int(row.get("Pixel_U", 0)),
-                    "v": int(row.get("Pixel_V", 0)),
-                    "w": int(row.get("BBox_W", 0)),
-                    "h": int(row.get("BBox_H", 0)),
-                    "is_prime": row.get("Is_Prime", "True"),
-                }
-            )
+            # Strip trailing/leading spaces from dict keys & values
+            clean_row = {k.strip(): v.strip() for k, v in row.items() if k is not None}
+            detections.append(clean_row)
     return detections
 
 
-def project_to_metres(detections: list):
-    mean_lat = np.mean([d["lat"] for d in detections])
-    mean_lon = np.mean([d["lon"] for d in detections])
-    lat_scale = math.cos(math.radians(mean_lat))
-    coords = []
-    for d in detections:
-        x = (d["lon"] - mean_lon) * R_EARTH * lat_scale * (math.pi / 180.0)
-        y = (d["lat"] - mean_lat) * R_EARTH * (math.pi / 180.0)
-        coords.append([x, y])
-    return np.array(coords), mean_lat, mean_lon
-
-
-def cluster_detections(detections: list, k: int = EXPECTED_TARGETS) -> dict:
+def cluster_detections(
+    detections,
+    eps_meters=3.0,
+    min_samples=3,
+):
     if len(detections) == 0:
         return {}
 
-    coords, _, _ = project_to_metres(detections)
+    coords = detections_to_meters(detections)
 
-    if len(detections) <= k:
-        return {i + 1: [d] for i, d in enumerate(detections)}
-
-    kmeans = KMeans(
-        n_clusters=k,
-        init="k-means++",
-        n_init=50,
-        random_state=42,
+    db = DBSCAN(
+        eps=eps_meters,
+        min_samples=min_samples,
     )
-    cluster_ids = kmeans.fit_predict(coords)
 
-    clusters: dict = {}
-    for i, cid in enumerate(cluster_ids):
-        clusters.setdefault(cid + 1, []).append(detections[i])
+    labels = db.fit_predict(coords)
+
+    clusters = {}
+
+    valid_labels = sorted(set(labels) - {-1})
+
+    label_map = {
+        old_label: new_id for new_id, old_label in enumerate(valid_labels, start=1)
+    }
+
+    for det, label in zip(detections, labels):
+        if label == -1:
+            continue
+
+        cluster_id = label_map[label]
+        clusters.setdefault(cluster_id, []).append(det)
     return clusters
 
 
-def metres_spread(cluster_items: list, centre_lat: float, centre_lon: float) -> float:
-    if len(cluster_items) < 2:
-        return 0.0
-    lat_scale = math.cos(math.radians(centre_lat))
-    max_r = 0.0
-    for d in cluster_items:
-        dy = (d["lat"] - centre_lat) * R_EARTH * (math.pi / 180.0)
-        dx = (d["lon"] - centre_lon) * R_EARTH * lat_scale * (math.pi / 180.0)
-        max_r = max(max_r, math.hypot(dx, dy))
-    return max_r
+def detections_to_meters(detections):
+    mean_lat = np.mean([float(d["Latitude"]) for d in detections])
+
+    lat_scale = math.cos(math.radians(mean_lat))
+
+    coords = []
+
+    for d in detections:
+        lat = float(d["Latitude"])
+        lon = float(d["Longitude"])
+
+        x = lon * R_EARTH * lat_scale * math.pi / 180.0
+        y = lat * R_EARTH * math.pi / 180.0
+
+        coords.append([x, y])
+
+    return np.array(coords)
 
 
-def save_cluster_outputs(
-    clusters: dict,
-    output_dir: str,
-    img_src_dir: str,
-    label: str,
-) -> list:
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
-
-    summary_csv = os.path.join(output_dir, "cluster_summary.csv")
-    annotation_csv = os.path.join(output_dir, "chip_annotations.csv")
-
+def save_cluster_outputs(clusters, output_root, img_dir, prefix_label):
+    os.makedirs(output_root, exist_ok=True)
     summary_rows = []
 
-    with (
-        open(summary_csv, "w", newline="") as sum_f,
-        open(annotation_csv, "w", newline="") as ann_f,
-    ):
-        sum_writer = csv.writer(sum_f)
-        sum_writer.writerow(
-            [
-                "Target_ID",
-                "Detections",
-                "Mean_Confidence",
-                "Max_Confidence",
-                "Averaged_Lat",
-                "Averaged_Lon",
-                "Spread_m",
-            ]
+    for cluster_id, dets in clusters.items():
+        cluster_folder = os.path.join(output_root, f"cluster_{cluster_id:02d}")
+        os.makedirs(cluster_folder, exist_ok=True)
+
+        lats = [float(d["Latitude"]) for d in dets]
+        lons = [float(d["Longitude"]) for d in dets]
+
+        center_lat = np.mean(lats)
+        center_lon = np.mean(lons)
+
+        spread_m = metres_spread(
+            dets,
+            center_lat,
+            center_lon,
         )
 
-        ann_writer = csv.writer(ann_f)
-        ann_writer.writerow(
-            [
-                "Chip_Filename",
-                "Target_ID",
-                "Confidence",
-                "Lat",
-                "Lon",
-                "Time_UTC",
-                "Is_Prime",
-            ]
+        best_det = max(dets, key=lambda d: float(d["YOLO_Confidence"]))
+
+        summary_rows.append(
+            {
+                "Cluster_ID": f"{prefix_label}_cluster_{cluster_id:02d}",
+                "Center_Lat": f"{center_lat:.7f}",
+                "Center_Lon": f"{center_lon:.7f}",
+                "Spread_m": f"{spread_m:.2f}",
+                "Detections_Count": len(dets),
+                "Mean_Confidence": (
+                    f"{np.mean([float(d['YOLO_Confidence']) for d in dets]):.3f}"
+                ),
+                "Best_Detection_Confidence": best_det["YOLO_Confidence"],
+                "Best_Detection_Image": best_det["Image_Name"],
+            }
         )
 
         print(
-            f"\n  {'Target':<8} {'Dets':>5} {'Avg Lat':>13} {'Avg Lon':>14} "
-            f"{'Spread':>9} {'AvgConf':>8}"
+            f"Cluster {cluster_id:02d} | "
+            f"N={len(dets):3d} | "
+            f"Spread={spread_m:6.2f}m | "
+            f"Center=({center_lat:.7f}, {center_lon:.7f})"
         )
-        print(f"  {'-' * 62}")
 
-        for tid in sorted(clusters.keys()):
-            items = clusters[tid]
-            n = len(items)
-            mean_conf = float(np.mean([d["conf"] for d in items]))
-            max_conf = float(np.max([d["conf"] for d in items]))
+        # Copy high-confidence crop images into cluster groups for offline sorting
+        for det in dets:
+            src_path = os.path.join(img_dir, det["Image_Name"])
+            if os.path.exists(src_path):
+                dest_path = os.path.join(cluster_folder, det["Image_Name"])
+                shutil.copy2(src_path, dest_path)
 
-            avg_lat = float(np.mean([d["lat"] for d in items]))
-            avg_lon = float(np.mean([d["lon"] for d in items]))
+    # Save a cluster summary CSV report
+    summary_csv = os.path.join(output_root, f"cluster_summary_{prefix_label}.csv")
+    if summary_rows:
+        with open(summary_csv, mode="w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=summary_rows[0].keys())
+            writer.writeheader()
+            writer.writerows(summary_rows)
+        print(f"  📝 Saved cluster summary report: {summary_csv}")
 
-            spread = metres_spread(items, avg_lat, avg_lon)
-
-            sum_writer.writerow(
-                [
-                    tid,
-                    n,
-                    f"{mean_conf:.3f}",
-                    f"{max_conf:.3f}",
-                    f"{avg_lat:.7f}",
-                    f"{avg_lon:.7f}",
-                    f"{spread:.2f}",
-                ]
-            )
-
-            target_folder = os.path.join(output_dir, f"Target_{tid}")
-            os.makedirs(target_folder, exist_ok=True)
-
-            for item in items:
-                ann_writer.writerow(
-                    [
-                        item["chip_image"],
-                        tid,
-                        f"{item['conf']:.2f}",
-                        f"{item['lat']:.7f}",
-                        f"{item['lon']:.7f}",
-                        item["time"],
-                        item["is_prime"],
-                    ]
-                )
-
-                src = os.path.join(img_src_dir, item["chip_image"])
-                dst = os.path.join(target_folder, item["chip_image"])
-
-                if os.path.exists(src):
-                    if item["w"] > 0 and item["h"] > 0:
-                        img = cv2.imread(src)
-                        pad = 30
-                        y1 = max(0, int(item["v"] - item["h"] / 2 - pad))
-                        y2 = min(img.shape[0], int(item["v"] + item["h"] / 2 + pad))
-                        x1 = max(0, int(item["u"] - item["w"] / 2 - pad))
-                        x2 = min(img.shape[1], int(item["u"] + item["w"] / 2 + pad))
-                        cv2.imwrite(dst, img[y1:y2, x1:x2])
-                    else:
-                        shutil.copy2(src, dst)
-                else:
-                    print(f"  ⚠️  Missing image: {src}")
-
-            print(
-                f"  T{tid:<7} {n:>5} {avg_lat:>13.7f} {avg_lon:>14.7f} "
-                f"{spread:>8.2f}m {mean_conf:>8.3f}"
-            )
-
-            summary_rows.append(
-                {
-                    "tid": tid,
-                    "n": n,
-                    "avg_lat": avg_lat,
-                    "avg_lon": avg_lon,
-                    "spread": spread,
-                    "mean_conf": mean_conf,
-                }
-            )
-
-    print(f"\n  ✅ Summary    → {summary_csv}")
-    print(f"  ✅ Annotations → {annotation_csv}")
-    print(f"  ✅ Chip dirs   → {output_dir}/Target_*/")
     return summary_rows
 
 
-def print_comparison(full_rows: list, prime_rows: list):
-    print(f"\n{'=' * 75}")
-    print(f"  FULL vs PRIME COMPARISON  (K-Means++  k={EXPECTED_TARGETS}  n_init=50)")
-    print(f"{'=' * 75}")
-    print(f"  {'':10} {'─── FULL ───':>30}   {'─── PRIME ───':>30}")
-    print(
-        f"  {'Target':<10} {'Dets':>5} {'Spread':>8} {'AvgConf':>8}   "
-        f"{'Dets':>5} {'Spread':>8} {'AvgConf':>8}  {'Δ Spread':>10}"
-    )
-    print(f"  {'-' * 73}")
+def metres_spread(cluster_items, centre_lat, centre_lon):
+    if len(cluster_items) < 2:
+        return 0.0
 
-    def find_prime_match(full_row):
-        if not prime_rows:
-            return None
-        lat_scale = math.cos(math.radians(full_row["avg_lat"]))
+    lat_scale = math.cos(math.radians(centre_lat))
 
-        def dist(p):
-            dy = (p["avg_lat"] - full_row["avg_lat"]) * R_EARTH * math.pi / 180
-            dx = (
-                (p["avg_lon"] - full_row["avg_lon"])
-                * R_EARTH
-                * lat_scale
-                * math.pi
-                / 180
-            )
-            return math.hypot(dx, dy)
+    max_r = 0.0
 
-        best = min(prime_rows, key=dist)
-        return best if dist(best) < 50 else None
+    for d in cluster_items:
+        lat = float(d["Latitude"])
+        lon = float(d["Longitude"])
 
-    for fr in sorted(full_rows, key=lambda r: r["tid"]):
-        pr = find_prime_match(fr)
-        if pr:
-            delta = pr["spread"] - fr["spread"]
-            delta_str = f"{delta:+.2f}m"
-            prime_str = f"{pr['n']:>5} {pr['spread']:>7.2f}m {pr['mean_conf']:>8.3f}"
-        else:
-            delta_str = "  no match"
-            prime_str = f"{'—':>5} {'—':>8} {'—':>8}"
+        dy = (lat - centre_lat) * R_EARTH * math.pi / 180.0
 
-        print(
-            f"  T{fr['tid']:<9} {fr['n']:>5} {fr['spread']:>7.2f}m "
-            f"{fr['mean_conf']:>8.3f}   {prime_str}  {delta_str:>10}"
-        )
+        dx = (lon - centre_lon) * R_EARTH * lat_scale * math.pi / 180.0
 
-    print(f"{'=' * 75}")
-    if prime_rows:
-        avg_full_spread = np.mean([r["spread"] for r in full_rows])
-        avg_prime_spread = np.mean([r["spread"] for r in prime_rows])
-        print(
-            f"  Mean spread — FULL: {avg_full_spread:.2f}m  "
-            f"PRIME: {avg_prime_spread:.2f}m  "
-            f"Improvement: {avg_full_spread - avg_prime_spread:+.2f}m"
-        )
-    print()
+        max_r = max(max_r, math.hypot(dx, dy))
+
+    return max_r
 
 
 def main():
-    os.makedirs(CLUSTERS_DIR, exist_ok=True)
+    parser = argparse.ArgumentParser(
+        description="CUASC Post-Flight Target Clustering Pipeline"
+    )
+    parser.add_argument(
+        "--flight_dir",
+        type=str,
+        default=DEFAULT_FLIGHT_DIR,
+        help="Path to the standard Flight folder containing mission CSV files.",
+    )
+    parser.add_argument(
+        "--eps",
+        type=float,
+        default=3.0,
+        help="DBSCAN clustering radius in meters",
+    )
+
+    parser.add_argument(
+        "--min_samples",
+        type=int,
+        default=3,
+        help="Minimum detections required to form a cluster",
+    )
+    args = parser.parse_args()
+
+    FLIGHT_DIR = os.path.abspath(os.path.normpath(args.flight_dir))
+    CSV_FULL = os.path.join(
+        FLIGHT_DIR, "mission_log_full_v2.csv"
+    )  # Prefer singularity-free V2 logs
+    CSV_PRIME = os.path.join(FLIGHT_DIR, "mission_log_prime_v2.csv")
+    PROCESSED_IMG_DIR = os.path.join(FLIGHT_DIR, "targets")
+    CLUSTERS_DIR = os.path.join(FLIGHT_DIR, "target_clusters")
+
+    print(f"\n⚙️ Running Clustering Pipeline for: {FLIGHT_DIR}")
+
+    if not os.path.exists(FLIGHT_DIR):
+        print(f"❌ Error: Specified flight directory does not exist: {FLIGHT_DIR}")
+        sys.exit(1)
+
+    # Fallback to standard V1 logs if V2 does not exist
+    if not os.path.exists(CSV_FULL) and os.path.exists(
+        os.path.join(FLIGHT_DIR, "mission_log_full_v1.csv")
+    ):
+        CSV_FULL = os.path.join(FLIGHT_DIR, "mission_log_full_v1.csv")
+        CSV_PRIME = os.path.join(FLIGHT_DIR, "mission_log_prime_v1.csv")
 
     full_rows = []
     if os.path.exists(CSV_FULL):
-        print(f"\n{'=' * 65}")
-        print(f"  FULL CSV  →  {CSV_FULL}")
-        print(f"{'=' * 65}")
+        print(f"\n📂 processing full datasets -> {CSV_FULL}")
         full_dets = load_csv(CSV_FULL)
-        print(f"  Loaded {len(full_dets)} detections")
+        print(f"  Loaded {len(full_dets)} valid detections")
         if full_dets:
-            full_clusters = cluster_detections(full_dets, k=EXPECTED_TARGETS)
-            print(f"  → {EXPECTED_TARGETS} clusters (K-Means++, n_init=50)")
+            full_clusters = cluster_detections(
+                full_dets,
+                eps_meters=args.eps,
+                min_samples=args.min_samples,
+            )
             full_rows = save_cluster_outputs(
-                full_clusters, CLUSTERS_FULL_DIR, PROCESSED_IMG_DIR, "FULL"
+                full_clusters,
+                os.path.join(CLUSTERS_DIR, "full"),
+                PROCESSED_IMG_DIR,
+                "FULL",
             )
 
     prime_rows = []
     if os.path.exists(CSV_PRIME):
-        print(f"\n{'=' * 65}")
-        print(f"  PRIME CSV  →  {CSV_PRIME}")
-        print(f"{'=' * 65}")
+        print(f"\n📂 processing center-zone prime datasets -> {CSV_PRIME}")
         prime_dets = load_csv(CSV_PRIME)
-        print(f"  Loaded {len(prime_dets)} detections (center-zone only)")
+        print(f"  Loaded {len(prime_dets)} prime center-zone detections")
         if prime_dets:
-            prime_clusters = cluster_detections(prime_dets, k=EXPECTED_TARGETS)
-            print(f"  → {EXPECTED_TARGETS} clusters (K-Means++, n_init=50)")
+            prime_clusters = cluster_detections(
+                prime_dets,
+                eps_meters=args.eps,
+                min_samples=args.min_samples,
+            )
             prime_rows = save_cluster_outputs(
-                prime_clusters, CLUSTERS_PRIME_DIR, PROCESSED_IMG_DIR, "PRIME"
+                prime_clusters,
+                os.path.join(CLUSTERS_DIR, "prime"),
+                PROCESSED_IMG_DIR,
+                "PRIME",
             )
 
-    if full_rows and prime_rows:
-        print_comparison(full_rows, prime_rows)
-    elif full_rows:
-        print("\n  (Prime CSV missing — comparison not available)")
-    elif prime_rows:
-        print("\n  (Full CSV missing — comparison not available)")
-    else:
-        print("\n  ❌ No data found in either CSV.")
-
-    print(f"📁 All outputs under: {CLUSTERS_DIR}")
+    if full_rows or prime_rows:
+        print(
+            "\n🎉 Target clustering finished! Output folders located at: target_clusters/"
+        )
 
 
 if __name__ == "__main__":

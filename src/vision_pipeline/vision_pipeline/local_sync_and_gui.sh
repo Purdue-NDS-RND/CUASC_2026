@@ -1,58 +1,98 @@
 #!/bin/bash
+set -euo pipefail
 
-# =================================================-------------------------
-# CUASC Ground Station Data Sync and Raycast GUI Launcher
-# Run this on your local computer to transfer and review flight metrics.
-# =================================================-------------------------
-
-# Prevent the script from continuing if a command fails
-set -e
-
-# --- CONFIGURATION (Adjust for your drone IP and username) ---
+# ----------------------------------------------------------
+# Drone Connection Configuration
+# ----------------------------------------------------------
 DRONE_USER="nds01"
-DRONE_IP="192.168.0.149" # Update this to your Jetson's active network IP address
+DRONE_IP="192.168.0.149"
+LOCAL_ROOT="$HOME/post_mission_processing"
+LOCAL_RAYCAST_DIR="$LOCAL_ROOT/raycast_sessions"
+LOCAL_MISSION_DIR="$LOCAL_ROOT/CUASC_Mission_Data"
 
-REMOTE_SESSIONS_DIR="/home/$DRONE_USER/raycast_sessions/"
-LOCAL_SESSIONS_DIR="$HOME/raycast_sessions"
+mkdir -p "$LOCAL_RAYCAST_DIR"
+mkdir -p "$LOCAL_MISSION_DIR"
 
-# Create local storage folders if not present
-mkdir -p "$LOCAL_SESSIONS_DIR"
+echo "📡 Connecting to $DRONE_USER@$DRONE_IP"
 
-echo "📡 Establishing connection to drone ($DRONE_USER@$DRONE_IP)..."
+# ----------------------------------------------------------
+# Find newest raycast session on drone
+# ----------------------------------------------------------
+LATEST_SESSION=$(ssh "$DRONE_USER@$DRONE_IP" \
+  'find ~/raycast_sessions \
+    -mindepth 1 \
+    -maxdepth 1 \
+    -type d \
+    -name "Raycast_Session_*" \
+    -printf "%T@ %p\n" | \
+    sort -n | \
+    tail -1 | \
+    cut -d" " -f2-')
 
-# Test physical network ping connection
-if ! ping -c 1 -W 2 "$DRONE_IP" > /dev/null 2>&1; then
-    echo "⚠️  Warning: Cannot reach $DRONE_IP over ICMP ping. Check your network or routing bridge!"
+# ----------------------------------------------------------
+# Find newest mission flight on drone
+# ----------------------------------------------------------
+LATEST_FLIGHT=$(ssh "$DRONE_USER@$DRONE_IP" \
+  'find ~/CUASC_Mission_Data \
+    -mindepth 1 \
+    -maxdepth 1 \
+    -type d \
+    -name "Flight_*" \
+    -printf "%T@ %p\n" | \
+    sort -n | \
+    tail -1 | \
+    cut -d" " -f2-')
+
+echo
+echo "🎯 Latest Raycast Session:"
+echo "   $LATEST_SESSION"
+echo
+echo "🎯 Latest Mission Flight:"
+echo "   $LATEST_FLIGHT"
+
+
+echo "🔌 Testing SSH connection..."
+
+if ! ssh -o ConnectTimeout=5 "$DRONE_USER@$DRONE_IP" "echo connected" >/dev/null 2>&1; then
+    echo "❌ Unable to connect to drone."
+    exit 1
 fi
 
-echo "🔄 Synchronizing raycast session datasets..."
-echo "--------------------------------------------------------"
+echo "✅ Drone reachable."
 
-# Use compressed rsync instead of standard scp.
-# Rsync uses delta-transfer algorithms to only copy modified frames and avoids
-# re-transferring previously loaded images during successive run syncs.
-rsync -avz --progress --exclude="*.tmp" \
-    "$DRONE_USER@$DRONE_IP:$REMOTE_SESSIONS_DIR" \
-    "$LOCAL_SESSIONS_DIR/"
+# ----------------------------------------------------------
+# Sync newest raycast session only
+# ----------------------------------------------------------
+echo
+echo "🔄 Syncing newest raycast session..."
+rsync -avz --partial --progress \
+  "$DRONE_USER@$DRONE_IP:$LATEST_SESSION/" \
+  "$LOCAL_RAYCAST_DIR/$(basename "$LATEST_SESSION")/"
 
-echo "--------------------------------------------------------"
-echo "✅ Synchronization complete! Files stored locally in: $LOCAL_SESSIONS_DIR"
+# ----------------------------------------------------------
+# Sync newest mission flight only
+# ----------------------------------------------------------
+echo
+echo "🔄 Syncing newest mission flight..."
+rsync -avz --progress \
+  "$DRONE_USER@$DRONE_IP:$LATEST_FLIGHT/" \
+  "$LOCAL_MISSION_DIR/$(basename "$LATEST_FLIGHT")/"
 
-echo "Ensure you cd into the directory of the raycast_gui.py"
+echo
+echo "✅ Sync complete."
+echo
+echo "Local data stored at:"
+echo "   $LOCAL_ROOT"
 
-# Launch Interactive Ground Station GUI
+# ----------------------------------------------------------
+# Launch GUI
+# ----------------------------------------------------------
 GUI_SCRIPT="raycast_gui.py"
 if [ -f "$GUI_SCRIPT" ]; then
-    echo "🖥️  Launching Interactive Target Geolocation Desk..."
-    python3 "$GUI_SCRIPT"
+  python3 "$GUI_SCRIPT"
+elif [ -f "./vision_pipeline/raycast_gui.py" ]; then
+  python3 "./vision_pipeline/raycast_gui.py"
 else
-    # Search locally within subdirectory setup
-    GUI_FALLBACK="./vision_pipeline/raycast_gui.py"
-    if [ -f "$GUI_FALLBACK" ]; then
-        echo "🖥️  Launching Interactive Target Geolocation Desk (Fallback Path)..."
-        python3 "$GUI_FALLBACK"
-    else
-        echo "❌ Error: Could not locate 'raycast_gui.py' inside local ground station workspace directory."
-        exit 1
-    fi
+  echo "❌ Could not find raycast_gui.py"
+  exit 1
 fi

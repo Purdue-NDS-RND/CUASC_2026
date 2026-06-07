@@ -13,8 +13,8 @@ mission_sequence:
               # Live-flight template: edit these coordinates before real flight.
               # The copied defaults below are inherited from the simulation demo and
               # are not safe operating coordinates on a real field.
-              target_latitude: 35.050012 # GPS latitude of the delivery target.
-              target_longitude: -118.151214 # GPS longitude of the delivery target.
+              target_latitude: 35.0498030 # GPS latitude of the delivery target.
+              target_longitude: -118.1509860 # GPS longitude of the delivery target.
               transit_altitude_m: 15.0 # Cruise altitude used while flying to the target area.
               drop_altitude_m: 6.0 # Target altitude for the package release.
               fake_drop: false # Simulate payload release without sending the sprayer release command.

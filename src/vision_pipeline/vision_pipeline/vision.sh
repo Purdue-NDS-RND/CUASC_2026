@@ -1,48 +1,70 @@
 #!/bin/bash
 
-# Prevent the script from continuing if a command fails
+# Prevent script from continuing if any compilation or sourcing step fails
 set -e
 
-echo "🚀 Pre-flight sequence initiated for user: $USER"
+echo "🚀 CUASCVTOL Pre-Flight Build & Launch Sequence"
+echo "================================================="
 
-# 1. Source the base ROS 2 installation
-# Using absolute path here is fine as /opt/ros is standard
+# 1. Source the base ROS 2 Humble installation
 if [ -f "/opt/ros/humble/setup.bash" ]; then
     source /opt/ros/humble/setup.bash
+    echo "✅ Base ROS 2 Humble Sourced"
 else
-    echo "❌ ROS 2 Humble not found in /opt!"
+    echo "❌ ROS 2 Humble not found in /opt! Exiting."
     exit 1
 fi
 
-# 2. Source custom workspace using $HOME
-WORKSPACE_PATH="$HOME/CUASC_2026/install/setup.bash"
-if [ -f "$WORKSPACE_PATH" ]; then
-    source "$WORKSPACE_PATH"
+# 2. Navigate to workspace root and rebuild the vision pipeline package
+WORKSPACE_DIR="$HOME/CUASC_2026"
+if [ -d "$WORKSPACE_DIR" ]; then
+    echo "🔨 Building vision_pipeline package..."
+    cd "$WORKSPACE_DIR"
+    # Rebuild only the vision_pipeline package to save valuable pre-flight time
+    colcon build --packages-select vision_pipeline
+
+    # Source local workspace setup
+    if [ -f "$WORKSPACE_DIR/install/setup.bash" ]; then
+        source "$WORKSPACE_DIR/install/setup.bash"
+        echo "✅ Custom VTOL Workspace Sourced Successfully"
+    else
+        echo "❌ install/setup.bash not found after colcon build!"
+        exit 1
+    fi
 else
-    echo "⚠️  Workspace not found at $WORKSPACE_PATH. Did you run colcon build?"
+    echo "❌ Workspace directory not found at $WORKSPACE_DIR!"
+    exit 1
 fi
 
-# 3. Define the YOLO path once to stay DRY (Don't Repeat Yourself)
+# 3. Setup YOLO Virtual Environment and Python Paths
 YOLO_DIR="$HOME/dev/VTOL-Project/src/yolo_models"
 VENV_PATH="$YOLO_DIR/yolo_env"
 
-# 4. Activate the virtual environment
 if [ -d "$VENV_PATH" ]; then
+    echo "🐍 Activating YOLO virtual environment..."
     source "$VENV_PATH/bin/activate"
-    
-    # 5. Enforce PYTHONPATH dynamically
-    # This finds the site-packages folder even if Python version changes slightly
+
+    # Enforce correct PYTHONPATH dynamically matching python site-packages
     SITE_PKGS=$(find "$VENV_PATH/lib" -name "site-packages" -type d | head -n 1)
-    export PYTHONPATH="$SITE_PKGS:$PYTHONPATH"
+    if [ -n "$SITE_PKGS" ]; then
+        export PYTHONPATH="$SITE_PKGS:$PYTHONPATH"
+        echo "✅ PYTHONPATH Exported: $SITE_PKGS"
+    else
+        echo "⚠️  Could not resolve site-packages directory inside virtual environment!"
+    fi
 else
-    echo "❌ YOLO virtual environment not found at $VENV_PATH"
+    echo "❌ YOLO virtual environment not found at $VENV_PATH!"
+    exit 1
 fi
 
-# 6. Reset Camera Daemon (Requires sudo)
-echo "📷 Resetting Argus Daemon..."
+# 4. Reset Camera Daemon (Crucial to clear Jetson camera driver lockups)
+echo "📷 Restarting nvargus-daemon (Requires sudo privileges)..."
 sudo systemctl restart nvargus-daemon
+sleep 1.0 # Give the system daemon a moment to fully initialize
 
-echo "✅ Environment configured. Launching pipeline!"
+echo "🔥 Pipeline Environment Ready! Slicing and Inference Live Flight Node Starting Now."
+echo "================================================================================"
 
-# 7. Launch nodes
-ros2 launch vision_pipeline vision_demo.launch.py
+# 5. Launch the unified yolo mission logger system node
+# Note: Ensure your setup.py has 'yolo_mission_node = vision_pipeline.yolo_mission_node:main'
+ros2 run vision_pipeline yolo_mission_node

@@ -22,6 +22,7 @@ mission_sequence:
         fake_drop: false                            # Simulate payload delivery without releasing the gripper actuator.
         descent_rate_mps: 0.4                     # Normal descent speed while centered over the target.
         final_descent_rate_mps: 0.25               # Slower descent speed near touchdown.
+        touchdown_min_altitude_m: -5.0             # Lowest home-relative final touchdown setpoint; allows lower target ground.
         delivery_dwell_s: 5.0                      # Time to remain on the ground before relaunch.
         guided_relaunch_rate_mps: 0.6              # Commanded climb rate for guided relaunch.
         guided_relaunch_max_climb_rate_mps: 2.5    # Maximum climb rate clamp during relaunch.

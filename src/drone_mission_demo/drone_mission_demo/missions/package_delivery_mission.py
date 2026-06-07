@@ -55,6 +55,9 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
         self._final_descent_rate_mps = float(
             config.get("final_descent_rate_mps", 0.2)
         )
+        self._touchdown_min_altitude_m = float(
+            config.get("touchdown_min_altitude_m", -2.0)
+        )
         self._delivery_dwell_s = float(config.get("delivery_dwell_s", 5.0))
         self._guided_relaunch_rate_mps = float(
             config.get("guided_relaunch_rate_mps", 0.6)
@@ -308,7 +311,7 @@ class PackageDeliveryMission(RedBullseyeMissionBase):
             current_altitude,
         )
         self._final_descent_target_altitude_m = max(
-            0.0,
+            self._touchdown_min_altitude_m,
             self._final_descent_target_altitude_m - max_descent_step,
         )
 

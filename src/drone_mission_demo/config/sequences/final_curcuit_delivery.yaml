@@ -33,6 +33,7 @@ mission_sequence:
         fake_drop: false
         descent_rate_mps: 0.4
         final_descent_rate_mps: 0.25
+        touchdown_min_altitude_m: -2.0
         delivery_dwell_s: 5.0
         guided_relaunch_rate_mps: 0.6
         guided_relaunch_max_climb_rate_mps: 2.5

@@ -145,7 +145,7 @@ ArduPilot `DISARM_DELAY` accordingly. A safe starting point is
 `DISARM_DELAY >= delivery_dwell_s + 5`, with `15-20 s` recommended for a
 `5-10 s` dwell.
 
-This v1 assumes the delivery target is on roughly the same ground plane as the original launch location.
+Final touchdown setpoints may go below the takeoff/home-relative zero altitude so slightly lower delivery targets do not stall just above the ground.
 The real actuator path now uses MAVROS gripper and sprayer commands; until the
 hardware flow is fully validated, `fake_drop: true` remains the safer demo setting.
 
@@ -153,6 +153,7 @@ Delivery-specific config keys:
 - `landing_check_threshold_m` — local-altitude threshold where the mission freezes the current GPS position and starts the fixed-column touchdown
 - `touchdown_handoff_tolerance_m` — separate altitude tolerance used only for the fixed-column touchdown handoff so this transition is not coupled to the broader arrival-altitude tolerance
 - `touchdown_dwell_s` — landed-state debounce before the mission accepts touchdown
+- `touchdown_min_altitude_m` — lowest home-relative global setpoint allowed during final touchdown; use a negative value when the target ground may be below the takeoff point
 - `delivery_dwell_s` — time to remain on the ground before relaunch
 - `relaunch_altitude_m` — altitude to climb back to after delivery
 - `centering_tolerance_norm` — centered-error magnitude in normalized image units required before descent continues

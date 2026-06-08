@@ -3,7 +3,7 @@ image_grabber:
         image_width: 3840
         image_height: 2160
         fps: 17
-        shutter_speed: 1000
+        shutter_speed: 500
         wb_mode: 6
         image_publishing_rate: 17.0
 

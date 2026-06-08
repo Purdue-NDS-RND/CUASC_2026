@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-MISSION_DATA_DIR="$HOME/CUASC_Mission_Data"
+MISSION_DATA_DIR="$HOME/post_mission_processing/CUASC_Mission_Data"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/target_clustering.py"
 
-EPS=5.0
-MIN_SAMPLES=3
+EPS=2
+MIN_SAMPLES=1
 
 echo "🔎 Searching for latest flight logs in:"
 echo "   $MISSION_DATA_DIR"

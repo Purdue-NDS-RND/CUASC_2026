@@ -1,209 +1,132 @@
-# 🚁 Setting up ROS Humble With Simulation
+# CUASC 2026 Autonomous Drone Platform
 
-> **Note:** Any installation instructions online that use a directory ending in `_ws` should now use `CUASC_2026` instead.
+CUASC 2026 is a competition-oriented autonomous aerial robotics platform built with ROS 2, ArduPilot, MAVROS, and computer vision. It coordinates complete drone missions—from takeoff and waypoint navigation to visual target acquisition, payload delivery, relaunch, and return-to-launch—through a reusable mission framework designed for both simulation and real hardware.
 
----
+The project’s central challenge is not making a drone perform one behavior in isolation. It is making perception, flight control, mission logic, and payload hardware work together reliably throughout a multi-stage flight.
 
-## 📦 Installation
+> This repository is under active development. Flight code and hardware procedures should be validated in simulation and reviewed against the team’s preflight process before use on a real aircraft.
 
-### 1. ROS 2 Humble
+## What the System Does
 
-**Reference:** https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html
-> Install the `ros-humble-desktop` variant.
+- Runs multiple missions during one flight without landing between stages unless the mission explicitly requires it.
+- Loads mission order and tuning from human-readable YAML instead of hard-coding a flight plan.
+- Navigates local ENU patterns and global GPS waypoints through MAVROS setpoints.
+- Detects red visual targets from USB or MIPI camera feeds and publishes resolution-independent alignment errors.
+- Supports vision-guided payload drops and armed touch-and-go deliveries with automatic relaunch.
+- Centralizes telemetry, setpoint ownership, mode changes, takeoff, and actuator commands to prevent competing controllers.
+- Provides simulation configurations, mission logging, telemetry readiness checks, and focused live-flight tests.
 
-Source ROS 2 in every terminal by adding it to your `.bashrc`:
+## Architecture
+
+```mermaid
+flowchart LR
+    Config["YAML mission sequences<br/>and parameters"] --> Executor["Mission executor"]
+    Registry["Mission registry"] --> Executor
+    Executor --> Mission["Active mission object<br/>timer-driven state machine"]
+
+    Camera["USB / MIPI camera"] --> CV["Target detection"]
+    CV --> Context["Shared mission context"]
+    Mission <--> Context
+
+    Context <--> MAVROS["MAVROS interface"]
+    MAVROS <--> FCU["ArduPilot flight controller"]
+    Context --> Payload["Gimbal / payload actuators"]
+
+    Executor --> Logs["Session telemetry<br/>and debug imagery"]
+```
+
+The system uses one timer-driven executor rather than one ROS node per mission. Missions are lightweight Python objects with a common lifecycle:
+
+```text
+on_enter(context) -> update(context) -> on_exit(context)
+```
+
+Each mission returns a status such as `RUNNING`, `SUCCESS`, or `FAILURE`. The executor advances the sequence, continuously republishes the active setpoint, and applies the configured failure policy—normally aborting the remaining sequence and requesting RTL.
+
+This design keeps behavior modular while ensuring that only one component owns flight-control outputs at a time.
+
+## Example Mission
+
+A package-delivery flight can be described as:
+
+1. Establish telemetry, enter `GUIDED`, arm, and take off.
+2. Fly through configured GPS waypoints to the delivery area.
+3. Enable computer vision and acquire the ground target.
+4. Correct horizontal error while descending toward the target.
+5. Commit to a fixed final column, confirm touchdown, and release the payload.
+6. Remain armed, relaunch to a safe altitude, continue the sequence, and RTL.
+
+The same executor can instead run local waypoint patterns, circuit time trials, package drops, or isolated hardware-test missions by selecting a different YAML sequence.
+
+## Repository Layout
+
+| Package | Responsibility |
+|---|---|
+| [`drone_mission_core`](src/drone_mission_core) | Mission lifecycle API, dynamic registry, YAML sequence loader, shared ROS interfaces, and timer-driven executor |
+| [`drone_mission_demo`](src/drone_mission_demo) | Takeoff, local/GPS waypoint, package-drop, package-delivery, and RTL mission implementations |
+| [`drone_target_cv`](src/drone_target_cv) | USB/MIPI image capture and red-target detection for closed-loop alignment |
+| [`drone_utils`](src/drone_utils) | Takeoff orchestration, MAVLink stream setup, gimbal control, session logging, and simulation helpers |
+| [`drone_live_tests`](src/drone_live_tests) | Focused real-aircraft tests that exercise risky behaviors independently of a full mission |
+| [`vision_pipeline`](src/vision_pipeline) | Broader image capture, inference, geolocation, clustering, and offline photogrammetry experiments |
+
+More detailed design documentation is available in [`Architecture.md`](Architecture.md). Package-level READMEs describe the interfaces and configuration for each subsystem.
+
+## Engineering Highlights
+
+### Reusable mission composition
+
+Mission classes separate behavior from infrastructure. A registry discovers mission types, while YAML controls their order and per-flight configuration. The same `LocalWaypointMission`, for example, can fly a square or zig-zag pattern without duplicating control code.
+
+### Non-blocking control
+
+Flight behaviors are explicit state machines driven by ROS timers and asynchronous service calls. The executor remains responsive to telemetry and can enforce failure behavior while a mission is in progress.
+
+### Simulation-to-hardware path
+
+The software targets Gazebo/ArduPilot SITL as well as a Jetson-connected flight controller. Camera sources and launch configurations can be swapped without changing the mission API, and hardware preflight scripts verify that required MAVROS telemetry is available before flight.
+
+### Safety and observability
+
+The framework supports abort-and-RTL policies, bounded target-loss recovery, touchdown confirmation from flight-controller state, configurable fake payload releases, timestamped command/image logs, and standalone live tests for high-risk transitions.
+
+## Technology
+
+- Python and ROS 2 Humble
+- ArduPilot, MAVROS, and MAVLink
+- Gazebo Harmonic and ArduPilot SITL
+- OpenCV and NumPy
+- USB and MIPI camera pipelines
+- YAML-driven mission and parameter configuration
+- Jetson companion-computer deployment
+
+## Getting Started
+
+The full environment instructions have been moved to [`SETUP.md`](SETUP.md). Jetson-specific configuration is documented in [`JETSON_SETUP.md`](JETSON_SETUP.md).
+
+After installing the required ROS 2, MAVROS, Gazebo, and ArduPilot dependencies:
 
 ```bash
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
-```
-
----
-
-### 2. Testing ROS 2 Installation
-
-Open two terminals and verify communication:
-
-**Terminal 1 — Talker:**
-```bash
-ros2 run demo_nodes_cpp talker
-```
-Expected output:
-```
-[INFO] [talker]: Publishing: 'Hello, world! 0'
-[INFO] [talker]: Publishing: 'Hello, world! 1'
-...
-```
-
-**Terminal 2 — Listener:**
-```bash
-ros2 run demo_nodes_cpp listener
-```
-Expected output:
-```
-[INFO] [listener]: I heard: 'Hello, world! 0'
-[INFO] [listener]: I heard: 'Hello, world! 1'
-...
-```
-
----
-
-### 3. ROS Build Tools
-
-```bash
-sudo apt install -y build-essential cmake git \
-  python3-colcon-common-extensions python3-pip \
-  python3-rosdep python3-vcstool python3-catkin-tools
-```
-
----
-
-### 4. Gazebo Harmonic
-
-**Reference:** https://gazebosim.org/docs/harmonic/install_ubuntu/
-
-Follow the instructions on the page to install Gazebo Harmonic.
-
----
-
-### 5. ArduPilot SITL
-
-**Reference:** *(link TBD)*
-
----
-
-### 6. MAVROS
-
-**Reference:** https://docs.ros.org/en/humble/p/mavros/
-
-```bash
-sudo apt install ros-humble-mavros ros-humble-mavros-extras
-
-cd ~/Downloads
-wget https://raw.githubusercontent.com/mavlink/mavros/ros2/mavros/scripts/install_geographiclib_datasets.sh
-sudo bash install_geographiclib_datasets.sh
-```
-
----
-
-## 🚀 Boot Simulation
-
-```bash
-# Launch simulation
-ros2 launch ardupilot_gz_bringup iris_runway.launch.py
-
-# Connect MAVROS (in a new terminal)
-ros2 launch mavros apm.launch.py fcu_url:=udp://:14550@
-```
-
----
-
-## 🎯 Drone Control — Target Spawner & Follower
-
-The `drone_control` package provides two nodes:
-
-| Node | Description |
-|------|-------------|
-| `target_spawner` | Spawns a random target near the takeoff point, publishes its position, and respawns after hover |
-| `target_follower` | Follows the target by publishing local position setpoints; handles GUIDED mode + arming |
-
-### Topics
-
-**Subscribed (MAVROS):**
-| Topic | Type |
-|-------|------|
-| `/mavros/local_position/pose` | `geometry_msgs/PoseStamped` |
-| `/mavros/state` | `mavros_msgs/State` |
-| `/mavros/home_position/home` | `mavros_msgs/HomePosition` |
-
-**Published:**
-| Topic | Type |
-|-------|------|
-| `/drone_control/target/pose` | `geometry_msgs/PoseStamped` |
-| `/drone_control/target/gps` | `sensor_msgs/NavSatFix` |
-| `/drone_control/target/status` | `std_msgs/String` |
-| `/mavros/setpoint_position/local` | `geometry_msgs/PoseStamped` |
-
-**Services Used:**
-| Service | Type |
-|---------|------|
-| `/mavros/cmd/arming` | `mavros_msgs/srv/CommandBool` |
-| `/mavros/set_mode` | `mavros_msgs/srv/SetMode` |
-| `/world/<world>/create` | `ros_gz_interfaces/srv/SpawnEntity` |
-
-### Notes
-
-- Target positions are in MAVROS local ENU. GPS output is an approximate conversion using the home position.
-- Spawn uses `allow_renaming=true` so it won't fail if a box with the same name already exists.
-
-### Run
-
-```bash
-# 1. Build
-colcon build --packages-select drone_control
+colcon build
 source install/setup.bash
-
-# 2. Launch
-ros2 launch <package> <launch_file>
-# Example:
-ros2 launch drone_control waypoint_demo.launch.py
+ros2 launch drone_mission_demo multi_mission_demo.launch.py
 ```
 
----
-
-## ✈️ Simple Takeoff (no targets)
-
-Handles mode switching, arming, and takeoff via MAVROS. **Only takes off when explicitly requested via service call.**
-
-> **Prerequisites:** Must have ArduPilot SITL + Gazebo + MAVROS running first
-
-### Service-Based Manual Takeoff
-
-Start the node and trigger takeoff when ready:
+Run a specific sequence by overriding the launch argument:
 
 ```bash
-# Terminal 1: Start Gazebo + ArduPilot SITL + MAVROS
-ros2 launch ardupilot_gz_bringup iris_runway.launch.py
-
-# Terminal 2: Run the takeoff node
-ros2 run drone_control simple_takeoff
-
-# Terminal 3: Trigger takeoff when ready
-ros2 service call /drone_control/takeoff mavros_msgs/srv/CommandTOL \
-  "{altitude: 25.0, min_pitch: 0.0, yaw: 0.0}"
+ros2 launch drone_mission_demo multi_mission_demo.launch.py \
+  sequence:=config/sequences/square_only.yaml
 ```
 
-### Auto Takeoff (Optional)
+Real-aircraft operation requires the appropriate vehicle configuration, mission parameters, and preflight telemetry checks; see the setup and package-specific documentation before attempting a live run.
 
-To enable automatic takeoff on startup:
+## Extending the Platform
 
-```bash
-ros2 run drone_control simple_takeoff --ros-args -p auto_takeoff:=true
-```
+New behaviors can be added without changing the executor:
 
-**Parameters:**
+1. Subclass `BaseMission`.
+2. Register the class with `@register_mission("mission_type")`.
+3. Implement its non-blocking lifecycle methods.
+4. Add the module and mission configuration to a sequence YAML file.
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `takeoff_altitude_m` | `20.0` | Default takeoff altitude |
-| `auto_takeoff` | `true` | Takeoff automatically on startup |
-| `arm_on_start` | `true` | Arm automatically |
-| `set_guided_mode` | `true` | Switch to guided mode |
-| `guided_mode_name` | `"GUIDED"` | Flight mode name |
-| `max_arm_attempts` | `5` | Max arming retries |
-
----
-
-## ⚙️ Bashrc Recommendations
-
-Add the following to `~/.bashrc` to avoid re-sourcing every session:
-
-```bash
-# ROS 2
-source /opt/ros/humble/setup.bash
-source ~/Programming/CUASC_2026/install/setup.bash
-alias build='colcon build && source install/setup.bash'
-
-# Gazebo
-export GZ_VERSION=harmonic
-export PATH=$PATH:/home/ppatel/Programming/CUASC_2026/Micro-XRCE-DDS-Gen/scripts
-```
+The result is a flight stack where new mission logic remains isolated, testable, and composable with existing behaviors.
